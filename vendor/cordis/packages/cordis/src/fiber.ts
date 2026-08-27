@@ -328,7 +328,9 @@ export class Fiber {
         execute: () => {},
         collect,
       }
-      this.dispose = () => this.restart()
+      // Root disposal is a full app teardown: every child fiber and
+      // root-level effect is unloaded, but the root itself stays ACTIVE.
+      this.dispose = () => this._teardown()
     }
   }
 
@@ -712,11 +714,26 @@ export class Fiber {
   /**
    * Dispose and immediately reload this plugin with its current config.
    *
+   * On the root fiber this is a no-op: the root has no callback to re-run,
+   * so a restart cannot restore root-level effects or child fibers and must
+   * not destroy them. Use `dispose()` for an explicit full teardown.
+   *
    * @returns a promise resolving once the reload settled.
    * @throws {CordisError} `INACTIVE_EFFECT` when the fiber is already disposed.
    */
   async restart() {
     this.assertActive()
+    if (!this.runtime) return
+    return this._teardown()
+  }
+
+  /**
+   * Unload every effect and child fiber, then settle back to a stable state.
+   *
+   * Used by `restart()` on plugin fibers and by root `dispose()`: the root
+   * drains everything below it (app teardown) but is itself never DISPOSED.
+   */
+  private async _teardown() {
     this._setEpoch(INACTIVE)
     this._refresh()
     await this.await()
@@ -730,25 +747,29 @@ export class Fiber {
    *
    * @param config — the new raw config; validated before anything restarts.
    * @param noSave — hint for persistence hooks not to write the change back.
-   * @returns the update waterfall result; the default restart returns a promise.
+   * @returns a promise settling after the update waterfall or any lifecycle
+   * work already scheduled by this call. On a dependency-blocked PENDING
+   * fiber, the raw config is queued and the promise resolves without waiting
+   * for dependencies that may become available in the future.
    * @throws when validation, an update listener, or the restarted plugin fails.
    */
-  update(config: any, noSave = false) {
+  update(config: any, noSave = false): Promise<void> {
     this.assertActive()
     this._config = config
     if (this.state !== FiberState.ACTIVE) {
       // Config resolution may access injected services, so defer it until the
-      // fiber can activate.
+      // fiber can activate. Join lifecycle work already scheduled by this
+      // update; a dependency-blocked PENDING fiber has no work to await yet.
       this._error = undefined
       this._setEpoch(INACTIVE)
       this._refresh()
-      return
+      return this.await().then(() => {})
     }
     config = this._resolveConfig(config)
-    return this.context.waterfall(this, 'internal/update', config, noSave, () => {
+    return Promise.resolve(this.context.waterfall(this, 'internal/update', config, noSave, () => {
       this.config = config
       this._error = undefined
       return this.restart()
-    })
+    }))
   }
 }

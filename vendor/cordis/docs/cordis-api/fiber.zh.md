@@ -232,13 +232,17 @@ async await()
 /**
  * Dispose and immediately reload this plugin with its current config.
  *
+ * On the root fiber this is a no-op: the root has no callback to re-run,
+ * so a restart cannot restore root-level effects or child fibers and must
+ * not destroy them. Use `dispose()` for an explicit full teardown.
+ *
  * @returns a promise resolving once the reload settled.
  * @throws {CordisError} `INACTIVE_EFFECT` when the fiber is already disposed.
  */
 async restart()
 ```
 
-dispose 此插件，并立即使用其当前配置重新加载。
+dispose 此插件，并立即使用其当前配置重新加载。根 fiber 没有可重跑的回调，因此该操作在根 fiber 上是 no-op；应用整体卸载应调用 `dispose()`。
 
 **返回**一个在重新加载完成后兑现的 promise。
 
@@ -255,7 +259,10 @@ dispose 此插件，并立即使用其当前配置重新加载。
  *
  * @param config — the new raw config; validated before anything restarts.
  * @param noSave — hint for persistence hooks not to write the change back.
- * @returns the update waterfall result; the default restart returns a promise.
+ * @returns a promise settling after the update waterfall or any lifecycle
+ * work already scheduled by this call. On a dependency-blocked PENDING
+ * fiber, the raw config is queued and the promise resolves without waiting
+ * for dependencies that may become available in the future.
  * @throws when validation, an update listener, or the restarted plugin fails.
  */
 update(config: any, noSave = false)
@@ -268,7 +275,7 @@ update(config: any, noSave = false)
 - `config`：新的原始配置；在任何内容重新启动前进行校验。
 - `noSave`：提示持久化钩子不要写回此变更。
 
-**返回**更新 waterfall 的结果；默认的重新启动操作返回一个 promise。
+**返回**一个 Promise，在更新 waterfall 或本次调用已安排的生命周期工作完成后兑现。若 fiber 因缺少依赖而稳定在 PENDING，配置会先排队，该 Promise 不等待未来依赖出现。
 
 [源码](../../packages/cordis/src/fiber.ts#L736)
 

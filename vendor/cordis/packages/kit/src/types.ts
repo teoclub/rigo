@@ -83,6 +83,24 @@ export const hexToArrayBuffer = Binary.fromHex
 /** Encode binary data as hex. */
 export const arrayBufferToHex = Binary.toHex
 
+/**
+ * Clone an ArrayBuffer view while preserving its concrete type.
+ *
+ * TypedArrays (including Buffer) are copied element-wise through their own
+ * constructor — a subarray clones only its visible bytes, and the result
+ * keeps the original type (`.length`, `.set()`, Buffer methods, ...).
+ * DataView has no copy constructor, so it is rebuilt over a sliced buffer.
+ */
+function cloneView(source: ArrayBufferView): ArrayBufferView {
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(source)) {
+    return Buffer.from(source)
+  }
+  if (is('DataView', source)) {
+    return new DataView(source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength))
+  }
+  return new (source.constructor as new (input: ArrayBufferView) => ArrayBufferView)(source)
+}
+
 /** Deep-clone common JavaScript values while preserving prototypes. */
 export function clone<T>(source: T): T
 /** Deep-clone common JavaScript values while preserving prototypes and cycles. */
@@ -91,7 +109,7 @@ export function clone(source: any, refs = new Map<any, any>()) {
   if (is('Date', source)) return new Date(source.valueOf())
   if (is('RegExp', source)) return new RegExp(source.source, source.flags)
   if (isArrayBufferLike(source)) return source.slice(0)
-  if (ArrayBuffer.isView(source)) return source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength)
+  if (ArrayBuffer.isView(source)) return cloneView(source)
   const cached = refs.get(source)
   if (cached) return cached
   if (Array.isArray(source)) {
@@ -101,6 +119,28 @@ export function clone(source: any, refs = new Map<any, any>()) {
       result[index] = Reflect.apply(clone, null, [value, refs])
     })
     return result
+  }
+  if (is('Map', source)) {
+    const result: Map<any, any> = new (source.constructor as any)()
+    refs.set(source, result)
+    for (const [key, value] of source) {
+      result.set(Reflect.apply(clone, null, [key, refs]), Reflect.apply(clone, null, [value, refs]))
+    }
+    return result
+  }
+  if (is('Set', source)) {
+    const result: Set<any> = new (source.constructor as any)()
+    refs.set(source, result)
+    for (const value of source) {
+      result.add(Reflect.apply(clone, null, [value, refs]))
+    }
+    return result
+  }
+  // WeakMap/WeakSet/Promise entries live in internal slots and cannot be
+  // enumerated; cloning them would produce a prototype-only shell that
+  // throws on any method call, so return them by reference instead.
+  if (is('WeakMap', source) || is('WeakSet', source) || is('Promise', source)) {
+    return source
   }
   const result = Object.create(Object.getPrototypeOf(source))
   refs.set(source, result)
@@ -114,7 +154,7 @@ export function clone(source: any, refs = new Map<any, any>()) {
   return result
 }
 
-/** Deeply compare arrays, dates, regexps, buffers, and plain object fields. */
+/** Deeply compare arrays, dates, regexps, buffers, maps, sets, and plain object fields. */
 export function deepEqual(a: any, b: any, strict?: boolean): boolean {
   if (a === b) return true
   if (!strict && isNullable(a) && isNullable(b)) return true
@@ -138,5 +178,32 @@ export function deepEqual(a: any, b: any, strict?: boolean): boolean {
       }
       return true
     })
+    ?? check(is('Map'), (a, b) => {
+      if (a.size !== b.size) return false
+      const rest = [...b]
+      for (const [key, value] of a) {
+        const index = rest.findIndex(([otherKey, otherValue]) => {
+          return deepEqual(key, otherKey, strict) && deepEqual(value, otherValue, strict)
+        })
+        if (index === -1) return false
+        rest.splice(index, 1)
+      }
+      return true
+    })
+    ?? check(is('Set'), (a, b) => {
+      if (a.size !== b.size) return false
+      const rest = [...b]
+      for (const value of a) {
+        const index = rest.findIndex(other => deepEqual(value, other, strict))
+        if (index === -1) return false
+        rest.splice(index, 1)
+      }
+      return true
+    })
+    // WeakMap/WeakSet/Promise internals cannot be enumerated: identity was
+    // handled above, so any two distinct instances are unequal.
+    ?? check(is('WeakMap'), () => false)
+    ?? check(is('WeakSet'), () => false)
+    ?? check(is('Promise'), () => false)
     ?? Object.keys({ ...a, ...b }).every(key => deepEqual(a[key], b[key], strict))
 }

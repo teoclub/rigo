@@ -38,9 +38,9 @@ export namespace Time {
     's(?:ec(?:ond)?(?:s)?)?',
   ].map(unit => `(${numeric}${unit})?`).join('')}$`)
 
-  export function parseTime(source: string) {
+  function parseTimeValue(source: string) {
     const capture = timeRegExp.exec(source)
-    if (!capture) return 0
+    if (!capture) return undefined
     return (parseFloat(capture[1]) * week || 0)
       + (parseFloat(capture[2]) * day || 0)
       + (parseFloat(capture[3]) * hour || 0)
@@ -48,15 +48,40 @@ export namespace Time {
       + (parseFloat(capture[5]) * second || 0)
   }
 
+  /** Parse a duration into milliseconds, returning `0` for invalid input. */
+  export function parseTime(source: string) {
+    return parseTimeValue(source) ?? 0
+  }
+
+  /**
+   * Parse a date expression into a `Date`.
+   *
+   * Accepts relative durations (`1d`, `2h30m`, `0s` — relative to now),
+   * clock times (`HH`, `HH:mm`, `HH:mm:ss` — today at that time), month-day
+   * plus optional clock (`M-D`, `M-D-HH:mm`, ... — this year), and falls
+   * back to native parsing for full date strings. Clock-time forms are
+   * assembled from explicit components so the result never depends on the
+   * host locale.
+  */
   export function parseDate(date: string) {
-    const parsed = parseTime(date)
-    if (parsed) {
-      date = Date.now() + parsed as any
-    } else if (/^\d{1,2}(:\d{1,2}){1,2}$/.test(date)) {
-      date = `${new Date().toLocaleDateString()}-${date}`
-    } else if (/^\d{1,2}-\d{1,2}-\d{1,2}(:\d{1,2}){1,2}$/.test(date)) {
-      date = `${new Date().getFullYear()}-${date}`
+    const parsed = parseTimeValue(date)
+    if (parsed !== undefined) {
+      return new Date(Date.now() + parsed)
     }
+
+    const clock = /^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/.exec(date)
+    if (clock) {
+      const now = new Date()
+      const [, h = 0, m = 0, s = 0] = clock.map(value => value ? +value : 0)
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, s)
+    }
+
+    const monthDay = /^(\d{1,2})-(\d{1,2})(?:-(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?$/.exec(date)
+    if (monthDay) {
+      const [, M = 1, D = 1, h = 0, m = 0, s = 0] = monthDay.map(value => value ? +value : 0)
+      return new Date(new Date().getFullYear(), M - 1, D, h, m, s)
+    }
+
     return date ? new Date(date) : new Date()
   }
 

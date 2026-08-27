@@ -163,7 +163,9 @@ describe('fiber', () => {
     await fiber.await()
     expect(configs).toEqual([{ a: 1, validated: true }])
 
-    await (fiber.update({ a: 2 }) as any)
+    const vetoedUpdate = fiber.update({ a: 2 })
+    expect(vetoedUpdate).toHaveProperty('then')
+    await vetoedUpdate
     expect(vetoed).toBe(true)
     expect(configs).toHaveLength(1)
 
@@ -247,5 +249,40 @@ describe('fiber', () => {
     expect(effects.map((e) => e.label)).toContain('my-effect')
     await fiber.dispose()
     expect(fiber.getEffects()).toHaveLength(0)
+  })
+
+  it('root fiber restart preserves effects registered on the root context', async () => {
+    const ctx = new Context()
+    let fired = 0
+    ctx.on('test/root-restart', () => fired++)
+    ctx.emit('test/root-restart')
+    expect(fired).toBe(1)
+    // The root fiber has no callback to re-run, so its effects must survive
+    // a restart instead of being silently destroyed.
+    await ctx.fiber.restart()
+    ctx.emit('test/root-restart')
+    expect(fired).toBe(2)
+    expect(ctx.fiber.state).toBe(S.ACTIVE)
+  })
+
+  it('update() on a dependency-blocked PENDING fiber queues config and returns a promise', async () => {
+    const ctx = new Context()
+    const configs: any[] = []
+    const fiber = ctx.plugin({
+      inject: ['deferred'],
+      apply(_, config) { configs.push(config) },
+    }, { value: 0 })
+    expect(fiber.state).toBe(S.PENDING)
+
+    const result = fiber.update({ value: 1 })
+    expect(result).toHaveProperty('then')
+    await result
+    expect(fiber.state).toBe(S.PENDING)
+    expect(configs).toEqual([])
+
+    ctx.provide('deferred', true)
+    await fiber.await()
+    expect(fiber.state).toBe(S.ACTIVE)
+    expect(configs).toEqual([{ value: 1 }])
   })
 })

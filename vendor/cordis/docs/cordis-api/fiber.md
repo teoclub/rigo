@@ -232,13 +232,17 @@ Wait for current lifecycle work and rethrow startup errors.
 /**
  * Dispose and immediately reload this plugin with its current config.
  *
+ * On the root fiber this is a no-op: the root has no callback to re-run,
+ * so a restart cannot restore root-level effects or child fibers and must
+ * not destroy them. Use `dispose()` for an explicit full teardown.
+ *
  * @returns a promise resolving once the reload settled.
  * @throws {CordisError} `INACTIVE_EFFECT` when the fiber is already disposed.
  */
 async restart()
 ```
 
-Dispose and immediately reload this plugin with its current config.
+Dispose and immediately reload this plugin with its current config. On the root fiber this is a no-op; use `dispose()` for a full application teardown.
 
 **Returns** a promise resolving once the reload settled.
 
@@ -255,7 +259,10 @@ Dispose and immediately reload this plugin with its current config.
  *
  * @param config — the new raw config; validated before anything restarts.
  * @param noSave — hint for persistence hooks not to write the change back.
- * @returns the update waterfall result; the default restart returns a promise.
+ * @returns a promise settling after the update waterfall or any lifecycle
+ * work already scheduled by this call. On a dependency-blocked PENDING
+ * fiber, the raw config is queued and the promise resolves without waiting
+ * for dependencies that may become available in the future.
  * @throws when validation, an update listener, or the restarted plugin fails.
  */
 update(config: any, noSave = false)
@@ -268,7 +275,7 @@ Runs the `internal/update` waterfall first, so update hooks (and HMR) can veto o
 - `config` — the new raw config; validated before anything restarts.
 - `noSave` — hint for persistence hooks not to write the change back.
 
-**Returns** the update waterfall result; the default restart returns a promise.
+**Returns** a promise settling after the update waterfall or lifecycle work scheduled by this call. For a dependency-blocked PENDING fiber, the config is queued and the promise does not wait for future dependency availability.
 
 [Source](../../packages/cordis/src/fiber.ts#L736)
 

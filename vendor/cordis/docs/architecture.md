@@ -31,7 +31,7 @@ PENDING ──deps ready──> LOADING ──ok──> ACTIVE
 ACTIVE ──dep lost/restart──> UNLOADING
 UNLOADING ──deps restored──> LOADING     ──deps missing──> PENDING
 any live state ──dispose──> UNLOADING ──> DISPOSED (terminal)
-root fiber: uid = 0, dispose() unloads children, never DISPOSED
+root fiber: uid = 0, restart() is a no-op; dispose() unloads children, never DISPOSED
 ```
 
 Key APIs: `dispose()`, `await()` (settles and rethrows startup errors),

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import * as cordis from '@teoclub/cordis'
+// Check the production entry explicitly. This vendored package also exposes a
+// TypeScript source entry under the `development` condition, whose transpiled
+// const enums are not part of the published runtime API.
+import * as cordis from '../../packages/cordis/lib/index.js'
 
 /**
  * API surface snapshot (SPEC §4.1): the root entry's exported symbol names
@@ -7,8 +10,36 @@ import * as cordis from '@teoclub/cordis'
  * through the Breaking Changes process (SPEC §5.6).
  */
 describe('api surface', () => {
-  it('root exports match the frozen baseline snapshot', () => {
-    expect(Object.keys(cordis).sort()).toMatchSnapshot()
+  it('root exports match the frozen baseline', () => {
+    expect(Object.keys(cordis).sort()).toEqual([
+      'Context',
+      'CordisError',
+      'DisposableList',
+      'EventsService',
+      'Fiber',
+      'Inject',
+      'Logger',
+      'LoggerService',
+      'ReflectService',
+      'RegistryService',
+      'Service',
+      'ValidationError',
+      'buildOuterStack',
+      'c16',
+      'c256',
+      'composeError',
+      'createCallable',
+      'defaultFormatters',
+      'getPropertyDescriptor',
+      'getTraceable',
+      'isBailed',
+      'isConstructor',
+      'isObject',
+      'joinPrototype',
+      'resolveConfig',
+      'symbols',
+      'withProps',
+    ])
   })
 
   it('the SPEC §4.1 public API surface is fully present', () => {

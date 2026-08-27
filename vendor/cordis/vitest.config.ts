@@ -5,6 +5,7 @@ export default defineConfig({
     include: [
       'tests/conformance/**/*.spec.ts',
       'tests/integration/**/*.spec.ts',
+      'tests/kit/**/*.spec.ts',
       'tests/package/**/*.spec.ts',
       'tests/node/**/*.spec.ts',
     ],

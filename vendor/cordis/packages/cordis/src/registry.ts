@@ -334,9 +334,16 @@ export class RegistryService {
 
     const fiber = new Fiber(this.ctx, config, Inject.resolve(plugin.inject), runtime, getOuterStack)
     const wrapped = Object.create(fiber) as Fiber & PromiseLike<Fiber>
-    wrapped.then = (onFulfilled, onRejected) => {
-      return fiber.await().then(onFulfilled, onRejected)
+    // The thenable wrapper must not become the receiver of stateful Fiber
+    // methods. Assignments such as `this._config = config` would otherwise
+    // create shadow properties on the wrapper while lifecycle work continues
+    // on the real fiber stored by the runtime.
+    for (const key of ['assertActive', 'effect', 'getEffects', 'await', 'restart', 'update'] as const) {
+      defineProperty(wrapped, key, (fiber[key] as Function).bind(fiber))
     }
+    defineProperty(wrapped, 'then', (onFulfilled: any, onRejected: any) => {
+      return fiber.await().then(onFulfilled, onRejected)
+    })
     return wrapped
   }
 }
