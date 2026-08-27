@@ -1,0 +1,18 @@
+# Rigo Minimal Code Bundle — the official plugin tree (Issue 032).
+# Mirrors codeMinimalEntryTree() in src/index.ts (parity test pins them).
+# No shell/git/lsp/terminal/sandbox and no @teoclub/work-* entries.
+- insert:
+    - { id: session, name: '@teoclub/harness-session' }
+    - { id: context, name: '@teoclub/harness-context' }
+    - { id: systemPrompt, name: '@teoclub/harness-system-prompt' }
+    - { id: tools, name: '@teoclub/harness-tools' }
+    - { id: llm, name: '@teoclub/harness-llm', config: { provider: mock, model: mock } }
+    - { id: agent, name: '@teoclub/harness-agent' }
+    - { id: agentLoop, name: '@teoclub/harness-agent-loop' }
+    - { id: appBoot, name: '@teoclub/harness-app-boot' }
+    - { id: sessionPersistence, name: '@teoclub/shared-session-persistence-sqlite' }
+    - { id: actions, name: '@teoclub/shared-actions' }
+    - { id: approvals, name: '@teoclub/shared-approvals' }
+    - { id: audit, name: '@teoclub/shared-audit' }
+    - { id: repositoryContext, name: '@teoclub/code-context-repository' }
+    - { id: fileActions, name: '@teoclub/code-file-actions' }

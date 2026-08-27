@@ -1,0 +1,27 @@
+# Rigo Work Base Bundle — the official plugin tree (Issue 031; SPEC §2.6).
+# Mirrors workBaseEntryTree() in src/index.ts (a parity test pins them).
+# Patch targets: `llm` (provider/model), `knowledgeProvider` (path),
+# `toolWrite` (disabled: true) — AC-5/6.
+- insert:
+    - { id: session, name: '@teoclub/harness-session' }
+    - { id: context, name: '@teoclub/harness-context' }
+    - { id: systemPrompt, name: '@teoclub/harness-system-prompt' }
+    - { id: tools, name: '@teoclub/harness-tools' }
+    - { id: llm, name: '@teoclub/harness-llm', config: { provider: mock, model: mock } }
+    - { id: agent, name: '@teoclub/harness-agent' }
+    - { id: agentLoop, name: '@teoclub/harness-agent-loop' }
+    - { id: appBoot, name: '@teoclub/harness-app-boot' }
+    - { id: sessionPersistence, name: '@teoclub/shared-session-persistence-sqlite' }
+    - { id: knowledge, name: '@teoclub/shared-knowledge' }
+    - { id: knowledgeProvider, name: '@teoclub/shared-knowledge-sqlite-fts' }
+    - { id: documents, name: '@teoclub/work-documents' }
+    - { id: documentsProvider, name: '@teoclub/work-documents-local' }
+    - { id: actions, name: '@teoclub/shared-actions' }
+    - { id: approvals, name: '@teoclub/shared-approvals' }
+    - { id: audit, name: '@teoclub/shared-audit' }
+    - { id: workContext, name: '@teoclub/work-context' }
+    - { id: toolRead, name: '@teoclub/work-tool-document-read' }
+    - { id: toolWrite, name: '@teoclub/work-tool-document-write' }
+    - { id: facade, name: '@teoclub/api-sdk' }
+    - { id: http, name: '@teoclub/api-http' }
+    - { id: host, name: '@teoclub/work-base', config: { port: 0 } }

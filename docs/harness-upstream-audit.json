@@ -1,0 +1,460 @@
+{
+  "generatedAt": "2026-08-26T18:20:21.611Z",
+  "baseline": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+    "tag": "dsh-v0.1.1-rc.2",
+    "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+    "upstreamVersion": "0.1.1-rc.2",
+    "license": "MIT",
+    "licenseHolder": "DeepSeek"
+  },
+  "ported": [
+    {
+      "localPackage": "@teoclub/harness-brand",
+      "upstreamPath": "packages/util/brand",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 0,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 2,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-invariants",
+      "upstreamPath": "packages/runtime-diagnostics/invariants",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 9,
+      "deps": [],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-protocol",
+      "upstreamPath": "packages/typert/protocol",
+      "classification": "KEEP",
+      "srcFiles": 3,
+      "testFiles": 2,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 11,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-typert-registry",
+      "upstreamPath": "packages/typert/registry",
+      "classification": "KEEP",
+      "srcFiles": 5,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 12,
+      "deps": [
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-protocol"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-timeout",
+      "upstreamPath": "packages/util/timeout",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 3,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-attachment",
+      "upstreamPath": "packages/attachment/attachment",
+      "classification": "KEEP",
+      "srcFiles": 6,
+      "testFiles": 2,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 9,
+      "deps": [
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-code-runtime",
+      "upstreamPath": "packages/code-runtime/code-runtime",
+      "classification": "KEEP",
+      "srcFiles": 3,
+      "testFiles": 2,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 8,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-scope",
+      "upstreamPath": "packages/core/scope",
+      "classification": "KEEP",
+      "srcFiles": 4,
+      "testFiles": 3,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 19,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-llm",
+      "upstreamPath": "packages/llm/llm",
+      "classification": "KEEP",
+      "srcFiles": 14,
+      "testFiles": 12,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [
+        {
+          "file": "tests/attribution.spec.ts",
+          "substitutions": [
+            "repoint manifest read"
+          ],
+          "reason": "reads the upstream package manifest relative to the test location; after the move to tests/upstream/ it must point into the ported package directory"
+        }
+      ],
+      "specifierEdits": 38,
+      "deps": [
+        "@teoclub/harness-attachment",
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-timeout"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-session",
+      "upstreamPath": "packages/core/session",
+      "classification": "KEEP",
+      "srcFiles": 10,
+      "testFiles": 13,
+      "omittedTestFiles": [
+        {
+          "file": "tests/gen-persistence-catalog.spec.ts",
+          "reason": "snapshots the upstream persistence-package catalog; most entries are outside the migration closure"
+        }
+      ],
+      "adaptedTestFiles": [],
+      "specifierEdits": 65,
+      "deps": [
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-protocol",
+        "@teoclub/harness-scope"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-system-prompt",
+      "upstreamPath": "packages/core/system-prompt",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 4,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 22,
+      "deps": [
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-scope"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-agent",
+      "upstreamPath": "packages/core/agent",
+      "classification": "KEEP",
+      "srcFiles": 8,
+      "testFiles": 6,
+      "omittedTestFiles": [
+        {
+          "file": "tests/verify-export-jsdoc.spec.ts",
+          "reason": "audits upstream repo-wide export JSDoc conventions"
+        }
+      ],
+      "adaptedTestFiles": [],
+      "specifierEdits": 52,
+      "deps": [
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-protocol",
+        "@teoclub/harness-scope",
+        "@teoclub/harness-session",
+        "@teoclub/harness-system-prompt"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-agent-tool-presentation",
+      "upstreamPath": "packages/core/agent-tool-presentation",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 15,
+      "deps": [
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-tools"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-agent-default-model",
+      "upstreamPath": "packages/core/agent-default-model",
+      "classification": "KEEP",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 12,
+      "deps": [
+        "@teoclub/harness-agent",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-settings"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-agent-loop",
+      "upstreamPath": "packages/core/agent-loop",
+      "classification": "KEEP",
+      "srcFiles": 6,
+      "testFiles": 20,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [
+        {
+          "file": "tests/config-session-id.spec.ts",
+          "substitutions": [
+            "swap provider import",
+            "rename provider identifier"
+          ],
+          "reason": "uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo's only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test"
+        },
+        {
+          "file": "tests/resume.spec.ts",
+          "substitutions": [
+            "swap provider import",
+            "rename provider identifier",
+            "lazy rejection assertion (register-then-trigger) instead of bun-eager .rejects"
+          ],
+          "reason": "uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo's only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test bun's expect().rejects/.resolves evaluate the subject promise EAGERLY (blocking the test), so the vitest pattern of registering a rejection assertion and then triggering the rejection deadlocks under bun; the lazy then-form settles identically in both runtimes and asserts the same rejection message"
+        }
+      ],
+      "specifierEdits": 200,
+      "deps": [
+        "@teoclub/harness-agent",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-scope",
+        "@teoclub/harness-session",
+        "@teoclub/harness-session-persistence",
+        "@teoclub/harness-settings",
+        "@teoclub/harness-system-prompt",
+        "@teoclub/harness-tools"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-user-approval",
+      "upstreamPath": "packages/interaction/user-approval",
+      "classification": "KEEP",
+      "srcFiles": 3,
+      "testFiles": 2,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 28,
+      "deps": [
+        "@teoclub/harness-agent",
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-scope",
+        "@teoclub/harness-session",
+        "@teoclub/harness-system-prompt"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-tools",
+      "upstreamPath": "packages/core/tools",
+      "classification": "KEEP",
+      "srcFiles": 10,
+      "testFiles": 12,
+      "omittedTestFiles": [
+        {
+          "file": "tests/gen-tool-catalog.spec.ts",
+          "reason": "harvests the tool schemas of every upstream tool package; most are outside the migration closure"
+        }
+      ],
+      "adaptedTestFiles": [],
+      "specifierEdits": 89,
+      "deps": [
+        "@teoclub/harness-agent",
+        "@teoclub/harness-code-runtime",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-scope",
+        "@teoclub/harness-session",
+        "@teoclub/harness-system-prompt",
+        "@teoclub/harness-user-approval"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-session-persistence",
+      "upstreamPath": "packages/session/session-persistence",
+      "classification": "KEEP",
+      "srcFiles": 6,
+      "testFiles": 5,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [
+        {
+          "file": "tests/coordinator-contract.ts",
+          "substitutions": [
+            "assert flush(true) instead of resolves.not.toThrow (bun toThrow quirk)"
+          ],
+          "reason": "bun's .resolves.not.toThrow() treats any truthy resolved value as a thrown value, so the flush boolean fails it; asserting the documented store contract (flush drains to true) keeps the same meaning in both runtimes"
+        },
+        {
+          "file": "tests/preparations.spec.ts",
+          "substitutions": [
+            "attach lazy rejection handlers before aborting"
+          ],
+          "reason": "bun flags the promise rejection raised synchronously by AbortController.abort() as unhandled when no handler is attached yet, so the abort-then-await shape fails; attaching the lazy rejection handlers before aborting keeps the same semantics in both runtimes"
+        }
+      ],
+      "specifierEdits": 27,
+      "deps": [
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-session",
+        "@teoclub/harness-timeout"
+      ],
+      "adapted": false
+    },
+    {
+      "localPackage": "@teoclub/harness-settings",
+      "upstreamPath": "packages/settings/settings",
+      "classification": "ADAPT",
+      "srcFiles": 4,
+      "testFiles": 4,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 15,
+      "deps": [
+        "@teoclub/harness-brand",
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": true
+    },
+    {
+      "localPackage": "@teoclub/harness-home-paths",
+      "upstreamPath": "packages/util/home-paths",
+      "classification": "ADAPT",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 3,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": true
+    },
+    {
+      "localPackage": "@teoclub/harness-launch-environment",
+      "upstreamPath": "packages/util/launch-environment",
+      "classification": "ADAPT",
+      "srcFiles": 2,
+      "testFiles": 1,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 5,
+      "deps": [
+        "@teoclub/harness-invariants"
+      ],
+      "adapted": true
+    },
+    {
+      "localPackage": "@teoclub/harness-app-boot",
+      "upstreamPath": "packages/boot/app-boot",
+      "classification": "ADAPT",
+      "srcFiles": 3,
+      "testFiles": 6,
+      "omittedTestFiles": [],
+      "adaptedTestFiles": [],
+      "specifierEdits": 28,
+      "deps": [
+        "@teoclub/harness-agent",
+        "@teoclub/harness-agent-loop",
+        "@teoclub/harness-home-paths",
+        "@teoclub/harness-invariants",
+        "@teoclub/harness-launch-environment",
+        "@teoclub/harness-llm",
+        "@teoclub/harness-session",
+        "@teoclub/harness-system-prompt",
+        "@teoclub/harness-tools"
+      ],
+      "adapted": true
+    }
+  ],
+  "notPorted": [
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-base",
+      "upstreamPath": "packages/bundle/base",
+      "classification": "REPLACE",
+      "reason": "Replaced by the new @teoclub/work-base bundle (Rigo Work product composition)."
+    },
+    {
+      "upstreamPackage": "Coding packages (shell, lsp, sandbox, terminal, code-runtime backends)",
+      "upstreamPath": "packages/shell, packages/lsp, packages/sandbox, packages/terminal",
+      "classification": "REPLACE",
+      "reason": "Replaced by the minimal Rigo Code bundle (repository context + workspace file read/write) per PRD D-002."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-session-persistence-jsonl",
+      "upstreamPath": "packages/session/session-persistence-jsonl",
+      "classification": "DROP",
+      "reason": "PRD D-003: SQLite is the only official session persistence provider; JSONL provider dropped."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-llm-deepseek",
+      "upstreamPath": "packages/llm/deepseek",
+      "classification": "REPLACE",
+      "reason": "Replaced by the OpenAI-compatible provider (@teoclub/harness-llm-openai-compatible) and the CI mock provider."
+    },
+    {
+      "upstreamPackage": "Host / Client / Web / SDK product surface",
+      "upstreamPath": "packages/host, packages/client, packages/web, packages/sdk",
+      "classification": "REPLACE",
+      "reason": "Replaced by the lean React/Vite Rigo Work UI, HTTP/SSE host and in-process SDK (PRD D-006/D-007)."
+    }
+  ]
+}

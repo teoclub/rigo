@@ -1,0 +1,8 @@
+{
+  "name": "cordis-example-basic",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@teoclub/cordis": "workspace:*"
+  }
+}

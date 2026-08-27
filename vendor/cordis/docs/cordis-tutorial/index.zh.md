@@ -1,0 +1,63 @@
+# Cordis 教程
+
+[English](index.md) | 中文
+
+Cordis 是 DeepSeek Harness 底层的插件框架：它是一个小型运行时，其中的每项能力，包括工具、LLM（大语言模型）适配器、文件访问乃至 agent loop（智能体循环）本身，都是挂载到共享上下文中的插件。本教程通过动手实践讲解 Cordis：第 1–6 章已适配为 `@teoclub/*` 可运行示例；第 7 章保留 DeepSeek Harness 的原始集成上下文。
+
+本教程面向 agent 开发者。你不需要深入掌握 TypeScript；下文的 [TypeScript 说明](#typescript-notes)会解释可能陌生的语法，并且每一章都会给出确切命令和预期输出。
+
+如果你想阅读精简的概念参考，而不是逐步实践，请参阅[架构指南](../architecture.md)。详尽的框架参考见 [Cordis 核心 API](../cordis-api/context.zh.md)。
+
+如果你要为 DeepSeek Harness 本身编写插件，请从[上游 Harness 插件指南](https://github.com/deepseek-ai/deepseek-harness/blob/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/user/develop/basic/index.zh.md)开始。
+
+<a id="setup"></a>
+
+## 准备工作
+
+在本仓库根目录安装依赖并构建 workspace。第 1–6 章不需要 API 密钥。
+
+```sh
+bun install
+bun run build
+```
+
+创建各章使用的临时目录。`tmp/` 已被 git 忽略，因此你在其中写入的任何内容都不会进入版本控制：
+
+```sh
+mkdir -p tmp/cordis-tutorial
+cd tmp/cordis-tutorial
+```
+
+每一章都从该目录运行同一条命令：
+
+```sh
+bun ../../packages/cordis/bin.js
+```
+
+这个单文件启动器（见 [`packages/cordis/bin.js`](../../packages/cordis/bin.js)）会创建根 `Context`、挂载 Loader 插件，并让它从当前目录加载 `./cordis.yml`。其余所有内容，包括有哪些插件以及如何配置它们，都来自你稍后将编写的 YAML 文件。Bun 会直接加载教程中使用的 TypeScript 插件文件。
+
+## 章节
+
+1. [你的第一个插件](01-first-plugin.zh.md)：插件是函数，由 loader 挂载。
+2. [生命周期与 effect](02-lifecycle-and-effects.zh.md)：由 Cordis 管理的注册会在所属插件卸载时撤销。
+3. [服务](03-services.zh.md)：在 `ctx` 上公开一项能力，并通过 `inject` 依赖它。
+4. [事件](04-events.zh.md)：类型化事件、广播分发和 waterfall（瀑布式事件）的短路行为。
+5. [配置](05-config.zh.md)：读取 `cordis.yml` 中经过校验的配置，并在输入错误时明确报错。
+6. [组合与 HMR（热模块替换）](06-composition-and-hmr.zh.md)：把配置文件作为插件树，使用热重载，并诊断始终无法加载的插件。
+7. [进入 harness](07-into-the-harness.zh.md)：基于真实的 harness 服务注册一个可由模型调用的工具。
+
+<a id="typescript-notes"></a>
+
+## TypeScript 说明
+
+这些示例使用了普通现代 JavaScript 之外的三项 TypeScript 功能：
+
+- **类型注解**描述值，但不会改变运行时行为：`ctx: Context` 表示 `ctx` 具备 Cordis 上下文 API，`who: string` 接受文本，而 `string[]` 表示字符串数组。
+- **`import type { Context } from '@teoclub/cordis'`** 只导入类型信息。它在运行时会消失，因此仅为类型注解使用 `Context` 的插件文件不会增加运行时依赖。
+- **声明合并**（`declare module '@teoclub/cordis' { ... }`）会为 Cordis 已经声明的接口添加你的条目，例如新 `ctx.greeter` 属性的类型或事件名称。它不会生成任何运行时接线；插件必须另行提供服务或发出事件。第 3 章会完整展示该模式。
+
+第 5 章还会使用 `interface` 描述配置对象的字段，并使用 `Schema<Config>` 这类泛型表示 schema 校验哪些对象字段。你可以直接照写这些声明；周围的正文会解释每项声明连接了什么。
+
+本教程改编自
+[`deepseek-harness/docs/cordis-tutorial`](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/cordis-tutorial)，
+按 MIT License 使用。详见[第三方声明](../../THIRD_PARTY_NOTICES.md)。

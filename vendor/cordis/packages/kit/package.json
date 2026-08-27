@@ -1,0 +1,48 @@
+{
+  "name": "@teoclub/kit",
+  "description": "A collection of common utilities",
+  "version": "1.8.2",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/cordis.git",
+    "directory": "packages/kit"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "author": "Shigma <shigma10826@gmail.com>",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "vendor/cosmokit",
+      "upstreamPackage": "@deepseek-ai/cosmokit",
+      "upstreamVersion": "1.8.2",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "development": "./src/index.ts",
+      "import": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false
+}

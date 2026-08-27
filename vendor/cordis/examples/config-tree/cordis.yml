@@ -1,0 +1,4 @@
+- id: greeter
+  name: ./plugin.mjs
+  config:
+    message: hello from cordis.yml

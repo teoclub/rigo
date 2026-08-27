@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../harness/agent-protocol" },
+    { "path": "../../harness/session" },
+    { "path": "../../shared/approvals" },
+    { "path": "../../shared/audit" },
+    { "path": "../../../vendor/cordis/packages/cordis" }
+  ]
+}

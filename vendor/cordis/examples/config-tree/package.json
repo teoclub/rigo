@@ -1,0 +1,11 @@
+{
+  "name": "cordis-example-config-tree",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@teoclub/cordis": "workspace:*",
+    "@teoclub/cordis-plugin-loader": "workspace:*",
+    "@teoclub/cordis-plugin-include": "workspace:*",
+    "@teoclub/cordis-plugin-logger-console": "workspace:*"
+  }
+}

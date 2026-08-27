@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/kit" },
+    { "path": "packages/schemastery" },
+    { "path": "packages/cordis" },
+    { "path": "packages/plugins/loader" },
+    { "path": "packages/plugins/include" },
+    { "path": "packages/plugins/group" },
+    { "path": "packages/plugins/timer" },
+    { "path": "packages/plugins/hmr" },
+    { "path": "packages/plugins/logger-console" }
+  ]
+}

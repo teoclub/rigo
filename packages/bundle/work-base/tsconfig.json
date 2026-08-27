@@ -1,0 +1,28 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../api/http" },
+    { "path": "../../api/sdk" },
+    { "path": "../../harness/agent-protocol" },
+    { "path": "../../harness/app-boot" },
+    { "path": "../../harness/context" },
+    { "path": "../../harness/session" },
+    { "path": "../../harness/tools-protocol" },
+    { "path": "../../shared/actions" },
+    { "path": "../../shared/approvals" },
+    { "path": "../../shared/audit" },
+    { "path": "../../shared/knowledge" },
+    { "path": "../../shared/knowledge-sqlite-fts" },
+    { "path": "../../shared/session-persistence-sqlite" },
+    { "path": "../../shared/storage-sqlite-node" },
+    { "path": "../../work/context" },
+    { "path": "../../work/documents" },
+    { "path": "../../work/documents-local" },
+    { "path": "../../work/documents-write" },
+    { "path": "../../work/tool-document-read" },
+    { "path": "../../work/tool-document-write" },
+    { "path": "../../../vendor/cordis/packages/cordis" }
+  ]
+}

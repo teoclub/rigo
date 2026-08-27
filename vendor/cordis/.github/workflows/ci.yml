@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc -b
+      - run: bunx tsdown
+      - run: bun scripts/verify-packages.ts
+      - run: bun scripts/verify-old-scopes.ts
+      - run: bun scripts/verify-docs.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            packages/*/lib
+            packages/plugins/*/lib
+
+  test-node:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.19.0', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+      # conformance + integration + package + node-specific suites (vitest)
+      - run: bunx vitest run
+
+  test-bun:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # bun stable + previous stable, pinned at release time (SPEC §11.1-2);
+        # setup-bun needs concrete versions, not x-ranges
+        bun-version: ['latest', '1.3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun-version }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+      # the same conformance codebase + integration + bun-specific suites
+      # (bun test resolves the vitest imports through its compat layer)
+      - run: bun test tests/conformance tests/integration tests/package tests/bun
+
+  package-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+      # AC-007: pack nine tarballs, gates, empty-project install smoke on
+      # Node and Bun
+      - run: bun scripts/package-smoke.ts
+
+  release:
+    # publish with npm provenance; rc dist-tag first, latest after sign-off
+    # (SPEC §10.3). Runs only on version tags.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test-node, test-bun, package-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # npm provenance
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc -b && bunx tsdown
+      - run: bun scripts/verify-packages.ts && bun scripts/verify-old-scopes.ts
+      # publish in dependency order: kit -> schemastery -> cordis -> plugins
+      - name: Publish
+        run: |
+          for pkg in packages/kit packages/schemastery packages/cordis \
+                     packages/plugins/loader packages/plugins/include \
+                     packages/plugins/group packages/plugins/timer \
+                     packages/plugins/hmr packages/plugins/logger-console; do
+            (cd "$pkg" && npm publish --provenance --access public \
+              --tag "$(if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then echo rc; else echo latest; fi)")
+          done

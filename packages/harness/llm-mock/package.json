@@ -1,0 +1,22 @@
+{
+  "name": "@teoclub/harness-llm-mock",
+  "description": "Rigo Mock LLM provider (Issue 010): deterministic scripted streams for CI — text, tool calls, errors, drops, unknown tools and aborts",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/teoclub/rigo.git", "directory": "packages/harness/llm-mock" },
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "license": "MIT",
+  "teoclub": { "origin": "local", "issue": "010" },
+  "exports": {
+    ".": { "development": "./src/index.ts", "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/harness-llm": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

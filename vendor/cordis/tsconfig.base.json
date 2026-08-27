@@ -1,0 +1,40 @@
+{
+  // Resolution facade shared by every package project (mirrors the upstream
+  // harness layout: project references, not declaration aliases, keep each
+  // package compiled under its own tsconfig boundary). NEVER add
+  // include/files here - it would leak into every extending project.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"],
+    "paths": {
+      "@teoclub/kit": ["./packages/kit/src"],
+      "@teoclub/schemastery": ["./packages/schemastery/src"],
+      "@teoclub/cordis": ["./packages/cordis/src"],
+      "@teoclub/cordis-plugin-loader": ["./packages/plugins/loader/src"],
+      "@teoclub/cordis-plugin-include": ["./packages/plugins/include/src"],
+      "@teoclub/cordis-plugin-group": ["./packages/plugins/group/src"],
+      "@teoclub/cordis-plugin-timer": ["./packages/plugins/timer/src"],
+      "@teoclub/cordis-plugin-hmr": ["./packages/plugins/hmr/src"],
+      "@teoclub/cordis-plugin-logger-console": ["./packages/plugins/logger-console/src"]
+    }
+  }
+}

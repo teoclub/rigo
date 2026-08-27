@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../harness/session" },
+    { "path": "../../harness/session-persistence" },
+    { "path": "../../harness/session-protocol" },
+    { "path": "../storage-sqlite-node" },
+    { "path": "../../../vendor/cordis/packages/cordis" }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@teoclub/shared-knowledge-sqlite-fts",
+  "description": "Rigo SQLite FTS5 Knowledge Provider (SPEC §3.6/§5.3): chunked document indexing with BM25 retrieval and deterministic ranking",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/shared/knowledge-sqlite-fts"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "origin": "local",
+    "issue": "019"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/shared-knowledge": "*",
+    "@teoclub/shared-storage-sqlite-node": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

@@ -1,0 +1,18 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../code/context-repository" },
+    { "path": "../../code/file-actions" },
+    { "path": "../../harness/app-boot" },
+    { "path": "../../harness/context" },
+    { "path": "../../harness/session" },
+    { "path": "../../shared/actions" },
+    { "path": "../../shared/approvals" },
+    { "path": "../../shared/audit" },
+    { "path": "../../shared/session-persistence-sqlite" },
+    { "path": "../../shared/storage-sqlite-node" },
+    { "path": "../../../vendor/cordis/packages/cordis" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "cordis-example-node",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@teoclub/cordis": "workspace:*",
+    "@teoclub/cordis-plugin-loader": "workspace:*",
+    "@teoclub/cordis-plugin-include": "workspace:*"
+  }
+}

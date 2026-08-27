@@ -1,0 +1,45 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../agent"
+    },
+    {
+      "path": "../invariants"
+    },
+    {
+      "path": "../llm"
+    },
+    {
+      "path": "../scope"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../session-persistence"
+    },
+    {
+      "path": "../settings"
+    },
+    {
+      "path": "../system-prompt"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/cordis"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/schemastery"
+    }
+  ]
+}

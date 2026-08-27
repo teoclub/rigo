@@ -1,0 +1,26 @@
+{
+  "name": "@teoclub/api-sdk",
+  "description": "Rigo Runtime Facade + in-process SDK (SPEC §4.1): unified Session/Agent/Approval/Audit semantics without the network",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/teoclub/rigo.git", "directory": "packages/api/sdk" },
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "license": "MIT",
+  "teoclub": { "origin": "local", "issue": "027" },
+  "exports": {
+    ".": { "development": "./src/index.ts", "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/cordis": "*",
+    "@teoclub/harness-agent-protocol": "*",
+    "@teoclub/harness-session": "*",
+    "@teoclub/shared-approvals": "*",
+    "@teoclub/shared-audit": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

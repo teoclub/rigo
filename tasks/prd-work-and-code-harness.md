@@ -1,21 +1,38 @@
-# PRD：Work & Code Harness
+# PRD：Rigo
 
 ## 1. Introduction / Overview
 
-Work & Code Harness 是一个基于 `@teoclub/cordis` 的插件化 Agent 运行时与参考产品。
+Rigo 是一个基于 `@teoclub/cordis` 的插件化 Agent 工程，包含共享的 Agent 运行核心以及面向不同领域的参考产品。
 
-产品不从零实现 Agent Runtime，而是固定 DeepSeek Harness 上游提交，复用其经过验证的 Harness Core 工程代码、运行语义和测试体系，再迁移到自有命名空间。Coding 和 Work 不分别建设两套 Harness，而是共享领域无关的 Core，通过不同的插件、Provider 和 Bundle 提供领域能力。
+产品不从零实现 Agent Runtime，而是固定 DeepSeek Harness 上游提交，复用其经过验证的 Harness Core 工程代码、运行语义和测试体系，改造为 **Rigo Core**。**Rigo Work** 和 **Rigo Code** 不分别建设两套 Harness，而是共享领域无关的 Rigo Core，通过不同的插件、Provider 和 Bundle 提供领域能力。
 
-产品包含两个层面：
+工程的正式命名与分层如下：
 
-- 面向开发者的 Harness 框架：提供 Agent、Session、LLM、Context、Tool/Action、事件、插件组合与生命周期能力。
-- 面向用户的 Work Agent 参考产品：提供知识检索、文档读写、写操作审批、审计和 Web UI。
+```text
+Cordis
+插件框架与运行底座
+        │
+        ▼
+Rigo Core
+基于 DeepSeek Harness 改造的共享 Harness Core
+        │
+        ├─────────────┐
+        ▼             ▼
+Rigo Work         Rigo Code
+通用工作 Agent     编程 Agent
+```
 
-MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景。完整 Coding 工具集不属于 MVP，但 Core 不得包含 Work 专用依赖，并应允许后续挂载 Coding Bundle。
+产品包含三个层面：
+
+- **Rigo Core**：面向开发者的共享 Harness Core，提供 Agent、Session、LLM、Context、Tool/Action、事件、插件组合与生命周期能力。
+- **Rigo Work**：通用工作 Agent，提供知识检索、文档读写、写操作审批、审计和 Web UI。
+- **Rigo Code**：编程 Agent，共享 Rigo Core，通过独立领域插件提供仓库、文件、Shell、Git、LSP 和沙箱等编程能力。
+
+MVP 采用单用户、本地优先部署，官方参考产品聚焦 Rigo Work。完整 Rigo Code 工具集不属于 MVP，但 Rigo Core 不得包含 Rigo Work 专用依赖，并应允许后续挂载 Rigo Code Bundle。
 
 ## 2. Product Principles
 
-- Core 只包含 Coding 和 Work 共用且每次 Agent 执行不可缺少的能力。
+- Rigo Core 只包含 Rigo Code 和 Rigo Work 共用且每次 Agent 执行不可缺少的能力。
 - RAG、审批、持久化和 Workflow 属于可选 Shared Plugins。
 - 文件系统、Shell、LSP、邮件、文档、日历等属于领域能力插件。
 - Agent 公共接口与默认 Agent Loop 实现分离。
@@ -28,15 +45,15 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 ## 3. Goals
 
 - 固定一个 DeepSeek Harness 上游提交并生成可审计的迁移清单。
-- 复用并迁移领域无关的 Harness Core，而非重新实现。
+- 复用并迁移领域无关的 Harness Core，改造为 Rigo Core，而非重新实现。
 - 建立基于 `@teoclub/cordis` 的可组合插件运行时。
 - 提供稳定的 Agent、Session、Context、LLM 和 Action 公共接口。
-- 通过 Work Bundle 提供知识检索、文档读取和文档写入能力。
+- 通过 Rigo Work Bundle 提供知识检索、文档读取和文档写入能力。
 - 所有写操作在执行前获得用户审批。
 - Web UI 和 Headless SDK/API 使用同一 Agent Runtime。
 - 使用自动化测试验证迁移后 Core 与上游的关键行为一致。
 - 通过完整 E2E 测试验证检索、审批、执行、审计和 UI 展示链路。
-- 为后续 Coding Bundle 保留明确且不依赖 Work 实现的扩展边界。
+- 为后续 Rigo Code Bundle 保留明确且不依赖 Rigo Work 实现的扩展边界。
 
 ## 4. Target Users
 
@@ -44,7 +61,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 希望通过插件扩展模型、知识源、工具、策略、存储或交互界面的开发者。
 
-### Work User
+### Rigo Work User
 
 希望通过自然语言检索本地知识、生成内容并在审批后修改文档的用户。
 
@@ -68,16 +85,16 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - [ ] 自动检查可以发现缺少固定 Commit SHA 的条目。
 - [ ] Typecheck 和 lint 通过。
 
-### US-002：启动领域无关的 Harness Core
+### US-002：启动领域无关的 Rigo Core
 
-**Description:** 作为框架开发者，我希望启动一个不依赖 Coding 或 Work 插件的最小 Core，以便验证公共运行时边界。
+**Description:** 作为框架开发者，我希望启动一个不依赖 Rigo Code 或 Rigo Work 插件的最小 Rigo Core，以便验证公共运行时边界。
 
 **Acceptance Criteria:**
 
-- [ ] Core 可以创建 Cordis `Context` 并加载最小插件树。
-- [ ] Core 可以等待所有必要插件进入可用状态。
+- [ ] Rigo Core 可以创建 Cordis `Context` 并加载最小插件树。
+- [ ] Rigo Core 可以等待所有必要插件进入可用状态。
 - [ ] 启动失败时已加载插件按照相反顺序释放。
-- [ ] Core 源码不导入 Coding 或 Work 领域包。
+- [ ] Rigo Core 源码不导入 Rigo Code 或 Rigo Work 领域包。
 - [ ] 自动化测试验证启动、正常释放和部分启动失败。
 - [ ] Typecheck 和 lint 通过。
 
@@ -129,7 +146,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 ### US-006：可扩展 Context Assembly
 
-**Description:** 作为插件开发者，我希望注册上下文贡献器，以便 Coding 和 Work 插件能够向模型请求添加不同的信息。
+**Description:** 作为插件开发者，我希望注册上下文贡献器，以便 Rigo Code 和 Rigo Work 插件能够向模型请求添加不同的信息。
 
 **Acceptance Criteria:**
 
@@ -160,7 +177,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 ### US-008：Knowledge Retrieval 插件
 
-**Description:** 作为 Work 用户，我希望检索本地知识并看到来源，以便基于可验证资料完成问答。
+**Description:** 作为 Rigo Work 用户，我希望检索本地知识并看到来源，以便基于可验证资料完成问答。
 
 **Acceptance Criteria:**
 
@@ -176,7 +193,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 ### US-009：文档读取能力
 
-**Description:** 作为 Work 用户，我希望 Agent 能读取本地文档，以便分析和回答与文档内容有关的问题。
+**Description:** 作为 Rigo Work 用户，我希望 Agent 能读取本地文档，以便分析和回答与文档内容有关的问题。
 
 **Acceptance Criteria:**
 
@@ -208,7 +225,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 ### US-011：文档写入与版本保护
 
-**Description:** 作为 Work 用户，我希望 Agent 在获得批准后修改文档，以便安全地完成内容更新。
+**Description:** 作为 Rigo Work 用户，我希望 Agent 在获得批准后修改文档，以便安全地完成内容更新。
 
 **Acceptance Criteria:**
 
@@ -224,7 +241,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 
 ### US-012：写操作审批
 
-**Description:** 作为 Work 用户，我希望在外部写操作执行前查看并批准或拒绝，以便保持对工作结果的控制。
+**Description:** 作为 Rigo Work 用户，我希望在外部写操作执行前查看并批准或拒绝，以便保持对工作结果的控制。
 
 **Acceptance Criteria:**
 
@@ -255,9 +272,9 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - [ ] 自动化测试验证敏感字段被移除。
 - [ ] Typecheck 和 lint 通过。
 
-### US-014：Web Work Agent 界面
+### US-014：Rigo Work Web 界面
 
-**Description:** 作为 Work 用户，我希望在浏览器中提问、查看来源、审批动作并接收结果，以便完成完整工作流程。
+**Description:** 作为 Rigo Work 用户，我希望在浏览器中提问、查看来源、审批动作并接收结果，以便完成完整工作流程。
 
 **Acceptance Criteria:**
 
@@ -289,29 +306,29 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - [ ] API 集成测试覆盖发送、流式输出、审批和取消。
 - [ ] Typecheck 和 lint 通过。
 
-### US-016：Work Base Bundle
+### US-016：Rigo Work Base Bundle
 
-**Description:** 作为用户，我希望通过一个官方 Work Bundle 启动参考产品，以便无需手工编写完整插件配置。
+**Description:** 作为用户，我希望通过官方 Rigo Work Bundle 启动通用工作 Agent，以便无需手工编写完整插件配置。
 
 **Acceptance Criteria:**
 
-- [ ] Work Bundle 挂载 Session、Context、LLM、Agent 和 Agent Loop。
-- [ ] Work Bundle 挂载 Knowledge、Documents、Action、Approval 和 Audit 插件。
-- [ ] Work Bundle 不挂载 Shell、LSP 或 Coding 专用 Prompt。
+- [ ] Rigo Work Bundle 挂载 Session、Context、LLM、Agent 和 Agent Loop。
+- [ ] Rigo Work Bundle 挂载 Knowledge、Documents、Action、Approval 和 Audit 插件。
+- [ ] Rigo Work Bundle 不挂载 Shell、LSP 或 Rigo Code 专用 Prompt。
 - [ ] 用户可以通过 Patch 替换 LLM Provider。
 - [ ] 用户可以通过 Patch 替换 Knowledge Provider。
 - [ ] 用户可以通过 Patch 禁用文档写入。
-- [ ] 系统可以输出 Work Bundle 的最终插件树。
+- [ ] 系统可以输出 Rigo Work Bundle 的最终插件树。
 - [ ] Bundle 冒烟测试可以在全新本地目录启动。
 - [ ] Typecheck 和 lint 通过。
 
 ### US-017：上游行为兼容测试
 
-**Description:** 作为维护者，我希望迁移后的 Core 通过明确的上游行为测试，以便确认复刻没有破坏关键语义。
+**Description:** 作为维护者，我希望迁移后的 Rigo Core 通过明确的上游行为测试，以便确认改造没有破坏关键语义。
 
 **Acceptance Criteria:**
 
-- [ ] 兼容矩阵列出每个迁移 Core 包的上游测试来源。
+- [ ] 兼容矩阵列出每个迁移至 Rigo Core 的包及其上游测试来源。
 - [ ] Session 事件顺序测试通过。
 - [ ] Agent Turn/Step 状态机测试通过。
 - [ ] Tool/Action 执行和取消测试通过。
@@ -321,9 +338,9 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - [ ] 有意偏离上游的行为记录在兼容性文档中。
 - [ ] CI 阻止兼容测试失败的变更合入。
 
-### US-018：Work Harness 完整 E2E 测试
+### US-018：Rigo Work 完整 E2E 测试
 
-**Description:** 作为 QA 工程师，我希望自动化测试覆盖完整 Work Harness 流程，以便发现 UI、API、Agent、知识、审批和文档层之间的回归。
+**Description:** 作为 QA 工程师，我希望自动化测试覆盖完整 Rigo Work 流程，以便发现 UI、API、Agent、知识、审批和文档层之间的回归。
 
 **Acceptance Criteria:**
 
@@ -347,7 +364,7 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - FR-2：系统必须记录每个迁移文件或包的上游来源。
 - FR-3：系统必须保留适用的上游许可证和版权声明。
 - FR-4：系统必须使用 `@teoclub/cordis` 作为插件运行时。
-- FR-5：Harness Core 必须与 Coding 和 Work 领域实现解耦。
+- FR-5：Rigo Core 必须与 Rigo Code 和 Rigo Work 领域实现解耦。
 - FR-6：系统必须通过声明式配置加载插件树。
 - FR-7：系统必须支持 Profile 和 Bundle 分层组合。
 - FR-8：系统必须支持按稳定条目 ID 应用 Patch。
@@ -378,9 +395,9 @@ MVP 采用单用户、本地优先部署，官方参考产品聚焦 Work 场景�
 - FR-33：凭据不得进入模型上下文。
 - FR-34：凭据不得写入 Session 或审计日志。
 - FR-35：插件卸载必须撤销其服务、监听器和注册项。
-- FR-36：CI 必须运行 Core 行为兼容测试。
-- FR-37：CI 必须运行完整 Work Harness E2E 测试。
-- FR-38：系统必须允许后续 Coding Bundle 在不修改 Core 的情况下接入。
+- FR-36：CI 必须运行 Rigo Core 行为兼容测试。
+- FR-37：CI 必须运行完整 Rigo Work E2E 测试。
+- FR-38：系统必须允许后续 Rigo Code Bundle 在不修改 Rigo Core 的情况下接入。
 
 ## 7. Non-Goals
 
@@ -389,7 +406,7 @@ MVP 不包含：
 - 完整复刻 DeepSeek Harness 的全部产品包。
 - 保持 `@deepseek-ai/dsh-*` 包名兼容。
 - 保持 DeepSeek Profile 或 Bundle 配置兼容。
-- 完整 Coding Agent 产品。
+- 完整 Rigo Code 产品。
 - Shell、Git、LSP、终端和代码沙箱。
 - 邮件、日历、任务系统和 CRM 集成。
 - SaaS 多租户和组织级权限模型。
@@ -416,12 +433,12 @@ MVP Web UI 应围绕工作过程呈现，而不仅是聊天窗口：
 - Action 结果
 - 审计时间线
 
-### Shared Core
+### Rigo Core
 
-Core UI/API 不得出现：
+Rigo Core UI/API 不得出现：
 
-- Coding 专用消息类型
-- Work 专用消息类型
+- Rigo Code 专用消息类型
+- Rigo Work 专用消息类型
 - 特定 Provider 类型
 - 特定知识库字段
 - 特定文档平台字段
@@ -437,8 +454,7 @@ Core UI/API 不得出现：
 
 ## 9. Technical Considerations
 
-- `[Assumption]` 自有 npm 命名空间暂定为 `@teoclub/harness-*`。
-- `[Assumption]` MVP 官方领域包暂定为 `@teoclub/work-*`。
+- Rigo Core npm 包使用 `@teoclub/harness-*`，Rigo Work npm 包使用 `@teoclub/work-*`。
 - 上游迁移采用“先 Fork 验证、再选择性迁移”的两阶段策略。
 - 第一阶段不得同时重写 Agent Loop 状态机。
 - `agent-loop` 的迁移必须包含其实际依赖闭包，而非只复制 Core 目录。
@@ -446,9 +462,9 @@ Core UI/API 不得出现：
 - DeepSeek 专用环境变量、包名和品牌必须替换。
 - 有意偏离上游的行为必须记录在兼容性文档中。
 - CI 应使用 Mock LLM、固定检索数据集和临时文档目录。
-- 本地持久化实现的最终选型在技术 SPEC 中确定。
-- Web UI 是否复用上游 Client 架构在技术 SPEC 中评估。
-- Headless API 的传输协议在技术 SPEC 中确定。
+- Session 持久化仅提供官方 SQLite Provider。
+- Rigo Work Web UI 采用新建的精简 React/Vite 实现，不复用上游 Client 架构。
+- Headless 接入同时提供进程内 SDK 和 HTTP/SSE，两者共用 Runtime Facade。
 - 生产 Provider 的凭据必须通过引用解析，不得直接进入插件配置快照。
 - Cordis 的作用域隔离不是安全沙箱；MVP 只允许受控本地文档目录。
 
@@ -461,14 +477,14 @@ Core UI/API 不得出现：
 - NFR-5：写入失败不得留下部分文档内容。
 - NFR-6：重复审批或重试不得重复执行相同副作用。
 - NFR-7：所有插件必须支持可预测的生命周期释放。
-- NFR-8：Core 包不得依赖任何 Work 或 Coding Provider。
+- NFR-8：Rigo Core 包不得依赖任何 Rigo Work 或 Rigo Code Provider。
 - NFR-9：发布产物必须包含适用的第三方许可证和来源清单。
 - NFR-10：Typecheck、lint、单元测试、兼容测试和 E2E 测试必须在 CI 中通过。
 
 ## 11. Success Metrics
 
-- 迁移范围内的 Core 行为兼容测试通过率为 100%。
-- Work Harness 完整 E2E 测试连续运行无非确定性失败。
+- 迁移范围内的 Rigo Core 行为兼容测试通过率为 100%。
+- Rigo Work 完整 E2E 测试连续运行无非确定性失败。
 - 所有写操作均存在 Approval Request 和 Audit Record。
 - 拒绝审批路径产生的外部写入次数为 0。
 - 幂等重试产生的重复副作用次数为 0。
@@ -476,16 +492,23 @@ Core UI/API 不得出现：
 - Web UI 与 Headless API 对同一事件日志派生出一致结果。
 - 替换 LLM Provider 不需要修改 Core。
 - 替换 Knowledge Provider 不需要修改 Agent Loop。
-- 后续 Coding Bundle 可以仅通过插件和配置接入公共 Core。
+- 后续 Rigo Code Bundle 可以仅通过插件和配置接入 Rigo Core。
 
-## 12. Open Questions
+## 12. Confirmed Decisions
 
-1. 正式产品名称和 npm 命名空间是否使用 `@teoclub/harness-*`？
-2. MVP 是否需要提供一个最小 Coding Bundle 作为领域无关性验证，还是只保留兼容测试？
-3. Session 持久化默认采用 JSONL、SQLite，还是两者都提供？
-4. 本地 Knowledge Provider 默认采用何种索引实现？
-5. 文档工作区是否限定为单个目录？
-6. Web UI 是复用 DeepSeek Harness Client 架构，还是实现更小的 Work UI？
-7. Headless API 使用进程内 SDK、JSON-RPC、HTTP/SSE，还是同时提供两种？
-8. MVP 是否需要支持图片、PDF 和 Office 文档，还是仅支持 Markdown/纯文本？
-9. 上游同步周期采用按版本、按 Commit，还是按需更新？
+> 决策日期：2026-08-26
+> 决策记录：`1A, 2A, 3A, 4A, 5A, 6A, 7A, 8A, 9A`
+
+| ID | 已确认决策 |
+|---|---|
+| D-001 | Rigo Core 使用 `@teoclub/harness-*`，Rigo Work 使用 `@teoclub/work-*`。 |
+| D-002 | MVP 交付可执行的最小 Rigo Code Bundle，包含 Repository Context 和 Workspace File Read/Write。 |
+| D-003 | Session 持久化仅提供 SQLite Provider，作为默认与唯一官方实现。 |
+| D-004 | 本地 Knowledge Provider 默认使用 SQLite FTS5 全文检索。 |
+| D-005 | 每个 Session 固定一个 Workspace Root，所有文档路径必须位于该根目录内。 |
+| D-006 | Rigo Work Web UI 新建精简 React/Vite 实现，只交付对话、引用、审批、Diff 和审计所需界面。 |
+| D-007 | Headless 接入同时提供进程内 SDK 和 HTTP/SSE，两者共用同一 Runtime Facade。 |
+| D-008 | MVP 仅支持 Markdown 和纯文本的读写。 |
+| D-009 | 手动选择新的 DeepSeek Harness 官方 Release Tag，审计通过后升级，禁止自动跟随 `master`。 |
+
+本 PRD 目前无未决的阻塞性产品问题。

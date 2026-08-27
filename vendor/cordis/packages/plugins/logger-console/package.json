@@ -1,0 +1,56 @@
+{
+  "name": "@teoclub/cordis-plugin-logger-console",
+  "description": "Console logger exporter for cordis",
+  "version": "1.0.1",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/shared.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/cordis.git",
+    "directory": "packages/plugins/logger-console"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "author": "Shigma <shigma10826@gmail.com>",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "vendor/logger-console",
+      "upstreamPackage": "@deepseek-ai/cordis-plugin-logger-console",
+      "upstreamVersion": "1.0.1",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/shared.d.ts",
+      "node": "./lib/index.js",
+      "default": "./lib/browser.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/browser.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "@teoclub/kit": "^1.8.2",
+    "@teoclub/schemastery": "^3.18.1",
+    "supports-color": "^9.4.0"
+  },
+  "peerDependencies": {
+    "@teoclub/cordis": "^5.0.0"
+  }
+}

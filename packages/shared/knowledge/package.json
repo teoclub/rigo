@@ -1,0 +1,37 @@
+{
+  "name": "@teoclub/shared-knowledge",
+  "description": "Rigo Knowledge Service Definition (SPEC §5.3): named provider registry, Query/Top-K/filter contract, stable result ordering",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/shared/knowledge"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "origin": "local",
+    "issue": "018"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/cordis": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

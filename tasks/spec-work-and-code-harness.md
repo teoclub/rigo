@@ -1,7 +1,8 @@
-# SPEC：Work & Code Harness
+# SPEC：Rigo
 
 > Technical specification derived from: `tasks/prd-work-and-code-harness.md`  
 > Generated: 2026-08-25  
+> Updated: 2026-08-26
 > Target branch: `main`  
 > Base commit: `e173d5b`
 
@@ -9,9 +10,9 @@
 
 ### 1.1 What This SPEC Covers
 
-本 SPEC 定义 Work & Code Harness MVP 的技术架构、上游复刻边界、包结构、插件契约、数据模型、HTTP/SSE API、Agent 状态机、知识检索、文档 Action、审批、审计、安全、测试和实施顺序。
+本 SPEC 定义 Rigo MVP 的技术架构、上游复刻边界、包结构、插件契约、数据模型、HTTP/SSE API、Agent 状态机、知识检索、文档 Action、审批、审计、安全、测试和实施顺序。
 
-系统以 `@teoclub/cordis` 为插件微内核，复刻 DeepSeek Harness 的领域无关控制主干，通过 Work Bundle 和最小 Coding 测试 Bundle 验证同一 Core 可以服务不同领域。
+系统以 `@teoclub/cordis` 为插件框架与运行底座，复刻 DeepSeek Harness 的领域无关控制主干并改造为 Rigo Core，通过 Rigo Work Bundle 和最小 Rigo Code 测试 Bundle 验证同一 Rigo Core 可以服务不同领域。
 
 ### 1.2 PRD Reference
 
@@ -24,16 +25,21 @@
 
 | Decision | Choice | Rationale |
 |---|---|---|
+| 工程与产品命名 | Rigo / Rigo Core / Rigo Work / Rigo Code | Rigo 是正式工程名；Core 是共享 Harness Core；Work 与 Code 是两个领域 Agent |
+| npm 命名空间 | Core：`@teoclub/harness-*`；Work：`@teoclub/work-*` | 保留技术分类命名，不在 MVP 执行二次品牌化改名 |
 | 上游基线 | `dsh-v0.1.1-rc.2` / `b150a551...` | 截至生成日期，官方 Git 仓库最高 SemVer Release Tag；与当前 Cordis 复刻提交一致 |
+| 上游同步 | 手动选择官方 Release Tag | 固定 Tag 并审计后升级，禁止自动跟随 `master` |
 | 迁移策略 | 先 Fork 验证，再选择性迁移 | 先证明行为，再控制长期依赖闭包 |
 | 插件内核 | `@teoclub/cordis` | 当前仓库已经完成复刻、测试和双运行时验证 |
 | 包兼容性 | 保持行为语义，不保持 `@deepseek-ai/dsh-*` 包名 | 避免被上游产品命名与配置绑定 |
-| Session 存储 | SQLite 仅追加事件表 | 本地优先、事务性、易恢复和查询 |
+| Session 存储 | 仅提供 SQLite Provider，使用仅追加事件表 | 本地优先、事务性、易恢复和查询；MVP 不交付 JSONL Provider |
 | SQLite Provider | Node 24 `node:sqlite` 独立插件 | 无额外原生依赖；通过 Provider 隔离 API 变化风险 |
 | 本地检索 | SQLite FTS5 | 可确定测试、部署简单；Vector Provider 后续接入 |
+| 文档工作区 | 每个 Session 一个 Workspace Root | 路径边界明确，易于实现越界检查与审计 |
+| 文档格式 | Markdown 和纯文本读写 | 控制 MVP 解析和写入复杂度；PDF、图片和 Office 不在范围内 |
 | Web 接入 | 精简 React/Vite UI + HTTP/SSE | 不引入上游复杂 Host/Client/Typert 闭包 |
-| Headless 接入 | 进程内 SDK | 与 Web Host 共用同一 Runtime API |
-| Coding 验证 | 最小 Coding Bundle | 验证 Core 无 Work 依赖，不交付完整 Coding 产品 |
+| Headless 接入 | 进程内 SDK + HTTP/SSE | 两者共用同一 Runtime Facade，同时支持嵌入式和网络式接入 |
+| Rigo Code 验证 | 最小 Rigo Code Bundle | 验证 Rigo Core 无 Rigo Work 依赖，不交付完整 Rigo Code 产品 |
 | 写操作 | Policy → Approval → Action → Audit | 默认读取自动、写入需审批 |
 | UI 数据源 | Session/Agent Events | UI 不直接消费原始 LLM Provider Stream |
 
@@ -43,11 +49,22 @@
 
 ```mermaid
 flowchart TB
-    UI["Work Web UI"] --> HTTP["HTTP + SSE Host"]
+    CORDIS["Cordis<br/>插件框架与运行底座"] --> CORE["Rigo Core<br/>基于 DeepSeek Harness 改造的共享 Harness Core"]
+    CORE --> WORK_PRODUCT["Rigo Work<br/>通用工作 Agent"]
+    CORE --> CODE_PRODUCT["Rigo Code<br/>编程 Agent"]
+```
+
+Rigo Core 通过 Cordis 的 Context、Service、Fiber 和插件树获得组合与生命周期能力。Rigo Work 与 Rigo Code 仅共享 Rigo Core，领域插件、Provider、Bundle 和产品界面保持分离。
+
+MVP 运行拓扑：
+
+```mermaid
+flowchart TB
+    UI["Rigo Work Web UI"] --> HTTP["HTTP + SSE Host"]
     SDK["In-process SDK"] --> RUNTIME["Harness Runtime"]
     HTTP --> RUNTIME
 
-    subgraph RUNTIME["Cordis Plugin Tree"]
+    subgraph RUNTIME["Rigo Core on Cordis Plugin Tree"]
         AGENT["ctx.agents"]
         LOOP["ctx.agentLoop"]
         SESSION["ctx.sessions"]
@@ -77,11 +94,11 @@ flowchart TB
     ACTIONS --> AUDIT
     CONTEXT --> KNOWLEDGE
 
-    subgraph WORK["Work Bundle"]
+    subgraph WORK["Rigo Work Bundle"]
         DOCS["Documents Service"]
         LOCALDOCS["Local Document Provider"]
         DOCTOOLS["Document Tools"]
-        WORKCTX["Work Context"]
+        WORKCTX["Rigo Work Context"]
     end
 
     KNOWLEDGE --> LOCALDOCS
@@ -89,7 +106,7 @@ flowchart TB
     DOCS --> LOCALDOCS
     WORKCTX --> CONTEXT
 
-    subgraph CODING["Minimal Coding Test Bundle"]
+    subgraph CODING["Minimal Rigo Code Test Bundle"]
         REPOCTX["Repository Context"]
         FILEACTIONS["File Actions"]
     end
@@ -112,9 +129,9 @@ flowchart TB
 - Reversible Effects
 - Loader、Include、Group 和 HMR
 
-不得包含 Agent、Work 或 Coding 领域逻辑。
+不得包含 Agent、Rigo Work 或 Rigo Code 领域逻辑。
 
-#### Layer 1：Harness Core
+#### Layer 1：Rigo Core
 
 包含每次 Agent Turn 必需的领域无关能力：
 
@@ -129,7 +146,7 @@ flowchart TB
 - Agent Loop
 - App Boot
 
-Core 不得导入 `packages/work` 或 `packages/code`。
+Rigo Core 不得导入 `packages/work` 或 `packages/code`。
 
 #### Layer 2：Shared Plugins
 
@@ -145,15 +162,15 @@ Core 不得导入 `packages/work` 或 `packages/code`。
 
 #### Layer 3：Domain Bundles
 
-Work Bundle：
+Rigo Work Bundle：
 
-- Work Context
+- Rigo Work Context
 - Local Documents
 - SQLite FTS Knowledge
 - Document Read/Write Actions
-- Work Web UI
+- Rigo Work Web UI
 
-Minimal Coding Bundle：
+Minimal Rigo Code Bundle：
 
 - Repository Context Contributor
 - Workspace File Read Action
@@ -162,7 +179,7 @@ Minimal Coding Bundle：
 
 #### Layer 4：Surfaces
 
-- Work Web UI
+- Rigo Work Web UI
 - HTTP/SSE API
 - In-process SDK
 - 测试用 Headless Runner
@@ -184,7 +201,7 @@ Minimal Coding Bundle：
 | `dsh-settings` | `@teoclub/harness-settings` | Minimal subset |
 | `dsh-invariants` | `@teoclub/harness-invariants` | KEEP for tests |
 | `dsh-base` | `@teoclub/work-base` | REPLACE |
-| Coding packages | Minimal Coding Bundle | REPLACE |
+| Coding packages | Minimal Rigo Code Bundle | REPLACE |
 
 基线来源：[DeepSeek Harness `dsh-v0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2)。
 
@@ -207,17 +224,17 @@ Minimal Coding Bundle：
 
 ### 2.5 Dependency Rules
 
-- Domain Plugin 可以依赖 Core 和 Shared Service Definition。
+- Domain Plugin 可以依赖 Rigo Core 和 Shared Service Definition。
 - Domain Plugin 不得依赖其他领域的 Provider。
 - UI、HTTP 和 SDK 只依赖 `ctx.agents`、Session Event 与 Approval API。
 - Agent 扩展只依赖 `ctx.agents`，不得导入默认 Agent Loop。
 - Tool 是模型可见 Consumer；业务副作用由 Action 执行。
 - Knowledge Provider 不得直接写入 System Prompt。
 - Context Contributor 可以消费 Knowledge Service。
-- Core 不得导入 React、HTTP、SQLite、Work 或 Coding 包。
+- Rigo Core 不得导入 React、HTTP、SQLite、Rigo Work 或 Rigo Code 包。
 - SQLite Provider 为 Node-only；其 Service Definition 保持运行时无关。
-- Core 与 Cordis 包继续通过 Node 和 Bun 测试。
-- Work Reference App 以 Node 24 为生产运行时。
+- Rigo Core 与 Cordis 包继续通过 Node 和 Bun 测试。
+- Rigo Work Reference App 以 Node 24 为生产运行时。
 
 ### 2.6 Proposed File Structure
 
@@ -1068,7 +1085,7 @@ reason
 - Restart with Running Document Action
 - HTTP → Runtime → SSE
 - SDK 与 HTTP Projection 一致
-- Minimal Coding Bundle 隔离
+- Minimal Rigo Code Bundle 隔离
 
 ### 9.4 E2E Tests
 
@@ -1077,7 +1094,7 @@ reason
 Happy Path：
 
 ```text
-启动隔离 Work Server
+启动隔离 Rigo Work Server
 → 创建临时知识和文档
 → 打开 Web UI
 → 创建 Session
@@ -1104,7 +1121,7 @@ Failure Paths：
 | Story | Primary Tests |
 |---|---|
 | US-001 | Source manifest verification |
-| US-002 | Core boot/disposal integration |
+| US-002 | Rigo Core boot/disposal integration |
 | US-003 | Profile/Bundle/Patch tests |
 | US-004 | Session unit + restore integration |
 | US-005 | LLM registry + stream contract |
@@ -1118,7 +1135,7 @@ Failure Paths：
 | US-013 | Audit projection + redaction |
 | US-014 | Playwright UI scenarios |
 | US-015 | HTTP/SSE + SDK parity |
-| US-016 | Work Bundle smoke |
+| US-016 | Rigo Work Bundle smoke |
 | US-017 | Upstream compatibility matrix |
 | US-018 | Complete Playwright E2E |
 
@@ -1127,7 +1144,7 @@ FR-9—FR-18 由 Core Compatibility 测试覆盖。
 FR-19—FR-27 由 Action、Approval、Knowledge 和 Documents 测试覆盖。  
 FR-28—FR-32 由 HTTP/SSE、SDK 和 Playwright 覆盖。  
 FR-33—FR-35 由 Security、Redaction 和 Lifecycle 测试覆盖。  
-FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
+FR-36—FR-38 由 CI、E2E 和 Minimal Rigo Code Bundle 覆盖。
 
 ## 10. Implementation Plan
 
@@ -1139,7 +1156,7 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 - 建立 KEEP/ADAPT/DROP/REPLACE 清单。
 - 保存许可证与来源声明。
 
-### Phase 1：Harness Core Port
+### Phase 1：Rigo Core Port
 
 - 迁移 Protocol、Scope、Session、System Prompt、Tools、Agent 和 LLM。
 - 迁移 Agent Default Model 和 Agent Loop。
@@ -1162,7 +1179,7 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 - 实现 Knowledge Service Definition。
 - 实现 SQLite FTS5 Provider。
 - 实现 Documents Definition 和 Local Provider。
-- 实现 Work Context Contributor。
+- 实现 Rigo Work Context Contributor。
 
 ### Phase 4：Actions, Approval and Audit
 
@@ -1179,15 +1196,15 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 - 实现 HTTP API。
 - 实现 SSE Replay。
 - 实现 In-process SDK。
-- 实现精简 Work UI。
+- 实现精简 Rigo Work UI。
 - 实现审批、Diff、引用和审计界面。
 
 ### Phase 6：Bundles and Product Validation
 
-- 建立 Work Base Bundle。
-- 建立 Minimal Coding Bundle。
+- 建立 Rigo Work Base Bundle。
+- 建立 Minimal Rigo Code Bundle。
 - 加入 Mock LLM。
-- 完成 Work Bundle Smoke。
+- 完成 Rigo Work Bundle Smoke。
 - 完成完整 Playwright E2E。
 - 完成发布与许可证校验。
 
@@ -1206,9 +1223,9 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 | I-09 | Actions/Approval/Audit | I-03, I-06 |
 | I-10 | Document Read/Write Tools | I-07, I-08, I-09 |
 | I-11 | HTTP/SSE/SDK | I-04, I-06, I-09 |
-| I-12 | Work Web UI | I-11 |
-| I-13 | Work Base Bundle | I-07—I-12 |
-| I-14 | Minimal Coding Bundle | I-04, I-05, I-09 |
+| I-12 | Rigo Work Web UI | I-11 |
+| I-13 | Rigo Work Base Bundle | I-07—I-12 |
+| I-14 | Minimal Rigo Code Bundle | I-04, I-05, I-09 |
 | I-15 | Compatibility + E2E Gates | I-13, I-14 |
 
 ### 10.2 Incremental Delivery
@@ -1218,27 +1235,27 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 - Phase 3 交付只读知识问答。
 - Phase 4 交付 Headless 审批文档修改。
 - Phase 5 交付 Web UI。
-- Phase 6 交付 Work Bundle 和 Coding 验证 Bundle。
+- Phase 6 交付 Rigo Work Bundle 和 Rigo Code 验证 Bundle。
 
-能力启停通过 Cordis 配置行和 Patch 控制，不在 Core 中增加领域 Feature Flag。
+能力启停通过 Cordis 配置行和 Patch 控制，不在 Rigo Core 中增加领域 Feature Flag。
 
-## 11. Open Questions and Risks
+## 11. Decisions and Risks
 
-### 11.1 Unresolved Questions
+### 11.1 Confirmed Decisions
 
-无阻塞性技术问题。下列内容作为已选默认值进入 MVP：
+用户于 2026-08-26 确认 PRD 决策记录 `1A, 2A, 3A, 4A, 5A, 6A, 7A, 8A, 9A`：
 
-- npm Core Namespace：`@teoclub/harness-*`
-- Work Namespace：`@teoclub/work-*`
-- 文档范围：单个 Session 固定一个本地 Workspace Root
-- 文档格式：Markdown 和纯文本
-- Knowledge：SQLite FTS5
-- API：HTTP + SSE
-- SDK：进程内
-- Reference Host：Node 24
-- Core Library Tests：Node + Bun
-- Coding：仅最小验证 Bundle
-- 上游更新：显式选择新官方 Tag，禁止自动跟随 `master`
+1. Rigo Core 使用 `@teoclub/harness-*`，Rigo Work 使用 `@teoclub/work-*`。
+2. MVP 交付包含 Repository Context 和 Workspace File Read/Write 的最小 Rigo Code Bundle。
+3. Session 持久化仅提供 SQLite Provider。
+4. 本地 Knowledge Provider 使用 SQLite FTS5。
+5. 每个 Session 固定一个本地 Workspace Root。
+6. Rigo Work Web UI 新建精简 React/Vite 实现。
+7. Headless 同时提供进程内 SDK 和 HTTP/SSE，两者共用 Runtime Facade。
+8. MVP 仅支持 Markdown 和纯文本读写。
+9. 手动选择 DeepSeek Harness 官方 Release Tag，审计后升级，禁止自动跟随 `master`。
+
+本 SPEC 目前无未决的阻塞性产品或技术问题。
 
 ### 11.2 Technical Risks
 
@@ -1253,16 +1270,17 @@ FR-36—FR-38 由 CI、E2E 和 Minimal Coding Bundle 覆盖。
 | Approval 中断 Agent Loop | 重启恢复复杂 | 持久化 Tool Call、Approval 和 Action State |
 | SSE 长连接中断 | UI 状态缺失 | Session Event Replay + `Last-Event-ID` |
 | 插件可执行任意主机代码 | 安全风险 | 只加载可信插件；MVP 无在线安装 |
-| Work UI 重新建设 | 首版成本增加 | 只实现 PRD 所需页面，不复刻上游完整 UI |
+| Rigo Work UI 重新建设 | 首版成本增加 | 只实现 PRD 所需页面，不复刻上游完整 UI |
 
 ### 11.3 Assumptions
 
 - 单用户拥有本地 Workspace 的访问权限。
 - MVP 不需要组织级 RBAC。
-- Work Server 与浏览器运行在同一设备。
+- Rigo Work Server 与浏览器运行在同一设备。
 - 用户允许本地 SQLite 和索引文件。
 - 外部模型使用 OpenAI-compatible Provider 或 Mock Provider。
+- Reference Host 使用 Node 24。
+- Rigo Core Library Tests 在 Node 和 Bun 中执行。
 - 邮件、日历和任务系统不进入 MVP。
-- Coding Bundle 只用于架构验证。
 - 所有写操作默认需要审批。
 - Provider 凭据通过环境或本地凭据引用提供。

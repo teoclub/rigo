@@ -1,0 +1,24 @@
+{
+  "name": "@teoclub/code-file-actions",
+  "description": "Rigo Workspace File Read/Write Actions (Issue 032): boundary-safe reads and approved atomic writes",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "git+https://github.com/teoclub/rigo.git", "directory": "packages/code/file-actions" },
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "license": "MIT",
+  "teoclub": { "origin": "local", "issue": "032" },
+  "exports": {
+    ".": { "development": "./src/index.ts", "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/cordis": "*",
+    "@teoclub/harness-session": "*",
+    "@teoclub/shared-actions": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

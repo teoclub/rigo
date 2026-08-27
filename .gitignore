@@ -1,0 +1,22 @@
+# Dependencies (all workspace levels)
+node_modules/
+
+# Build output (tsc -b + tsdown emit into each package's lib/; CI builds it)
+lib/
+dist/
+*.tsbuildinfo
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# Logs and OS noise
+*.log
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example

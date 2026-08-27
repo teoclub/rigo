@@ -1,0 +1,57 @@
+{
+  "name": "@teoclub/harness-agent-tool-presentation",
+  "description": "Agent-plane presentation selector: composes one agent's tools as Code Mode, native, or both",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/harness/agent-tool-presentation"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "packages/core/agent-tool-presentation",
+      "upstreamPackage": "@deepseek-ai/dsh-agent-tool-presentation",
+      "upstreamVersion": "0.1.1-rc.2",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+      "classification": "KEEP"
+    }
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "development": "./src/invariant.ts",
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@teoclub/schemastery": "*"
+  },
+  "peerDependencies": {
+    "@teoclub/harness-invariants": "*",
+    "@teoclub/harness-tools": "*",
+    "@teoclub/cordis": "*"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

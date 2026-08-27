@@ -1,0 +1,38 @@
+{
+  "name": "@teoclub/shared-audit",
+  "description": "Rigo Audit Service (SPEC §3.7/§7.4): redacted session-event audit with projections",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/shared/audit"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "origin": "local",
+    "issue": "024"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/cordis": "*",
+    "@teoclub/harness-session": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

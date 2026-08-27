@@ -1,0 +1,41 @@
+{
+  "name": "@teoclub/cordis-root",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "packages/plugins/*",
+    "examples/*"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b && tsdown",
+    "typecheck": "tsc -b",
+    "audit:source": "bun scripts/audit-source.ts",
+    "rescope": "bun scripts/rescope.ts",
+    "verify:packages": "bun scripts/verify-packages.ts",
+    "verify:old-scopes": "bun scripts/verify-old-scopes.ts",
+    "verify:docs": "bun scripts/verify-docs.ts",
+    "package-smoke": "bun scripts/package-smoke.ts",
+    "test": "vitest run",
+    "test:node": "vitest run",
+    "test:bun": "bun test"
+  },
+  "devDependencies": {
+    "@teoclub/cordis": "workspace:*",
+    "@teoclub/cordis-plugin-group": "workspace:*",
+    "@teoclub/cordis-plugin-hmr": "workspace:*",
+    "@teoclub/cordis-plugin-include": "workspace:*",
+    "@teoclub/cordis-plugin-loader": "workspace:*",
+    "@teoclub/cordis-plugin-logger-console": "workspace:*",
+    "@teoclub/cordis-plugin-timer": "workspace:*",
+    "@teoclub/kit": "workspace:*",
+    "@teoclub/schemastery": "workspace:*",
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.22.14",
+    "typescript": "~5.9.0",
+    "vitest": "^4.1.11"
+  }
+}

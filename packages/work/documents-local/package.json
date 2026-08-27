@@ -1,0 +1,31 @@
+{
+  "name": "@teoclub/work-documents-local",
+  "description": "Rigo Local Documents Provider: safe Markdown/text reads inside the per-session Workspace Root",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/work/documents-local"
+  },
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "license": "MIT",
+  "teoclub": { "origin": "local", "issue": "017" },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/harness-session": "*",
+    "@teoclub/work-documents": "*"
+  },
+  "files": ["lib/index.js", "lib/types/**/*.d.ts"]
+}

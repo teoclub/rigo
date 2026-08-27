@@ -1,0 +1,49 @@
+{
+  "name": "@teoclub/shared-storage-sqlite-node",
+  "description": "Rigo SQLite storage provider and sequential migration framework (Node-only driver, runtime-agnostic definition)",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/shared/storage-sqlite-node"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "origin": "local",
+    "issue": "007"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js",
+      "development": "./src/index.ts"
+    },
+    "./definition": {
+      "types": "./lib/types/definition.d.ts",
+      "default": "./lib/definition.js",
+      "development": "./src/definition.ts"
+    },
+    "./node": {
+      "types": "./lib/types/node.d.ts",
+      "default": "./lib/node.js",
+      "development": "./src/node.ts"
+    },
+    "./package.json": "./package.json",
+    "./src/*": "./src/*"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/definition.js",
+    "lib/node.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

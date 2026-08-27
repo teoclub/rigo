@@ -1,0 +1,12 @@
+# Bun test entry (SPEC §9.2 dual-runtime requirement):
+# - preloads the vitest API polyfill globally, so every ported spec gets the
+#   `vi.waitFor`/`stubEnv`/`advanceTimersByTimeAsync`/`expect.poll` patches
+#   bun:test lacks without per-file imports (guards no-op under vitest, which
+#   never reads this file);
+# - preloads Node API shims (process.loadEnvFile) bun has not implemented;
+# - preloads the vitest->bun:test alias shim for direct `bun run` entry.
+[test]
+preload = ["./tests/support/bun-node-compat.ts", "./tests/support/vitest-bun-polyfill.ts", "./tests/support/bun-vitest-alias.ts"]
+# The Rigo Work Web component/markdown suites require jsdom (vitest-only);
+# their pure logic (api.ts, events.ts, links.ts) is covered by Bun elsewhere.
+exclude = ["apps/work-web/src/**/*.test.tsx"]

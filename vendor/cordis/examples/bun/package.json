@@ -1,0 +1,9 @@
+{
+  "name": "cordis-example-bun",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@teoclub/cordis": "workspace:*",
+    "@teoclub/cordis-plugin-timer": "workspace:*"
+  }
+}

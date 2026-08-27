@@ -1,0 +1,54 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../agent"
+    },
+    {
+      "path": "../agent-loop"
+    },
+    {
+      "path": "../home-paths"
+    },
+    {
+      "path": "../invariants"
+    },
+    {
+      "path": "../launch-environment"
+    },
+    {
+      "path": "../llm"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../system-prompt"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/cordis"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/plugins/group"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/plugins/hmr"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/plugins/include"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/plugins/loader"
+    }
+  ]
+}

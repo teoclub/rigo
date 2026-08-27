@@ -1,0 +1,24 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../invariants"
+    },
+    {
+      "path": "../tools"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/cordis"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/schemastery"
+    }
+  ]
+}

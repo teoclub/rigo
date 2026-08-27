@@ -1,0 +1,33 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../invariants"
+    },
+    {
+      "path": "../llm"
+    },
+    {
+      "path": "../protocol"
+    },
+    {
+      "path": "../scope"
+    },
+    {
+      "path": "../session"
+    },
+    {
+      "path": "../system-prompt"
+    },
+    {
+      "path": "../../../vendor/cordis/packages/cordis"
+    }
+  ]
+}

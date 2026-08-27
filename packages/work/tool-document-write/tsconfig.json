@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../documents" },
+    { "path": "../documents-write" },
+    { "path": "../../harness/session" },
+    { "path": "../../harness/tools-protocol" },
+    { "path": "../../shared/actions" },
+    { "path": "../../shared/approvals" },
+    { "path": "../../../vendor/cordis/packages/cordis" }
+  ]
+}

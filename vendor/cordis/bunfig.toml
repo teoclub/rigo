@@ -1,0 +1,9 @@
+# Bun-first toolchain (PRD §16.1). Published packages remain runtime-agnostic
+# and must run under Node.js as well (SPEC D3).
+# Supply-chain: Bun auto-install is explicitly disabled (SPEC §7) - all
+# dependencies must be declared.
+autoInstall = false
+
+[install]
+# lockfile-only honesty: exact versions pinned in bun.lock
+exact = false

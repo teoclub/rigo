@@ -1,0 +1,54 @@
+{
+  "name": "@teoclub/schemastery",
+  "description": "Type driven schema validator",
+  "version": "3.18.1",
+  "type": "module",
+  "main": "lib/index.cjs",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/cordis.git",
+    "directory": "packages/schemastery"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "author": "Shigma <shigma10826@gmail.com>",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "vendor/schemastery",
+      "upstreamPackage": "@deepseek-ai/schemastery",
+      "upstreamVersion": "3.18.1",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+    }
+  },
+  "module": "lib/index.mjs",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "development": "./src/index.ts",
+      "import": "./lib/index.mjs",
+      "require": "./lib/index.cjs"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.mjs",
+    "lib/index.cjs",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "@standard-schema/spec": "^1.1.0",
+    "@teoclub/kit": "^1.8.2"
+  }
+}

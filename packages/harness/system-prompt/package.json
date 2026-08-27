@@ -1,0 +1,58 @@
+{
+  "name": "@teoclub/harness-system-prompt",
+  "description": "System prompt assembly registry for Rigo",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/harness/system-prompt"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "packages/core/system-prompt",
+      "upstreamPackage": "@deepseek-ai/dsh-system-prompt",
+      "upstreamVersion": "0.1.1-rc.2",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+      "classification": "KEEP"
+    }
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "development": "./src/invariant.ts",
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@teoclub/schemastery": "*"
+  },
+  "peerDependencies": {
+    "@teoclub/harness-invariants": "*",
+    "@teoclub/harness-scope": "*",
+    "@teoclub/harness-llm": "*",
+    "@teoclub/cordis": "*"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.d.ts"
+  ]
+}

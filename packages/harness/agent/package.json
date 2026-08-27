@@ -1,0 +1,64 @@
+{
+  "name": "@teoclub/harness-agent",
+  "description": "Agent interface, registry, initiator scope, and event vocabulary for Rigo",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/harness/agent"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "teoclub": {
+    "source": {
+      "repository": "deepseek-ai/deepseek-harness",
+      "path": "packages/core/agent",
+      "upstreamPackage": "@deepseek-ai/dsh-agent",
+      "upstreamVersion": "0.1.1-rc.2",
+      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+      "classification": "KEEP"
+    }
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "development": "./src/invariant.ts",
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./types": {
+      "development": "./src/types.ts",
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@teoclub/harness-protocol": "*",
+    "@teoclub/harness-system-prompt": "*",
+    "@teoclub/harness-invariants": "*",
+    "@teoclub/harness-session": "*",
+    "@teoclub/harness-scope": "*",
+    "@teoclub/harness-llm": "*",
+    "@teoclub/cordis": "*"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ]
+}
