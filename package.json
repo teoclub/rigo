@@ -25,6 +25,7 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
+    "dev": "node --experimental-transform-types --conditions=development scripts/dev.ts",
     "build": "tsc -b && tsdown",
     "audit:source": "bun scripts/audit-source.ts",
     "lint": "oxlint packages apps examples scripts",

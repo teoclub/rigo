@@ -12,6 +12,9 @@ test-results/
 playwright-report/
 blob-report/
 
+# Local dev state (bun run dev: SQLite databases + demo workspace)
+.local/
+
 # Logs and OS noise
 *.log
 .DS_Store
