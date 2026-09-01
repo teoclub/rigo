@@ -392,11 +392,6 @@ export class ActionsService extends Service {
    * the input (BEFORE any policy/approval/side effect), issue a unique
    * execution id, resolve the pre-policy decision, then either execute,
    * deny, or suspend for approval.
-  /**
-   * Run one action through the pipeline: resolve the definition, validate
-   * the input (BEFORE any policy/approval/side effect), issue a unique
-   * execution id, resolve the pre-policy decision, then either execute,
-   * deny, or suspend for approval.
    * @param request - the action name and input.
    * @param signal - optional caller cancellation.
    * @returns the normalized execution outcome.

@@ -205,7 +205,9 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
    */
   function guardRequest(req: IncomingMessage, res: ServerResponse, requestId: string): boolean {
     const requestHost = req.headers.host
-    if (requestHost === undefined || !requestHost.startsWith(host)) {
+    // Exact host (or host:port) only: a prefix match would also admit a
+    // DNS-rebinding host like "127.0.0.1.evil.com".
+    if (requestHost === undefined || (requestHost !== host && !requestHost.startsWith(`${host}:`))) {
       sendEnvelope(res, { code: 'INVALID_REQUEST', message: 'invalid Host header' }, requestId, 403)
       return false
     }
