@@ -17,12 +17,32 @@ retains its upstream package names and execution context. See
 
 ## Audit Conclusions (Phase 0, human-reviewed)
 
+### Pinned revisions
+
+The distribution and the harness mirror are pinned separately, and they no longer share a
+commit:
+
+| Surface | Revision | Recorded in |
+| --- | --- | --- |
+| `vendor/cordis` (this monorepo) | `ddefc45fbc7f8e46dd73185e68295696d1297887` (`dsh-v0.1.6-alpha.2`) | each vendored `package.json` `teoclub.source.commit`; `docs/upstream.manifest.md` |
+| Harness mirror (`packages/harness/*`, `tests/upstream/*`) | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh-v0.1.1-rc.2`) | `../../docs/upstream-baseline.md`, `scripts/lib/baseline.ts` |
+
+The skew is deliberate: re-syncing the framework did not re-port the harness packages. It is
+bridged by TEO patch 11 below, which keeps `watchUserPatches()` working against the reverted
+HMR service.
+
+`scripts/upstream-tree.ts` materializes every upstream read from the pinned **commit**, never
+from a clone's working tree: a clone sits at whatever the user last checked out, and a
+working-tree read silently mixes revisions (the `dsh-v0.1.6-alpha.2` sync pulled
+`loader/src/config/entry.ts` and `cordis/src/logger.ts` from the clone's HEAD while every
+other file came from the tag).
+
 ### Version authority
 
 `package.json` is the source of truth (PRD §0.2). The `vendor/README.md` manifest table lags
 behind every package by one release step; the SPEC-predicted drift (cordis recorded as
-`4.0.0-rc.7`, actually `4.0.1`) extends to all nine packages. Audited versions above are
-authoritative and feed `teoclub.source.upstreamVersion` in each package manifest.
+`4.0.0-rc.7`, actually `4.0.2` at this pin) extends to all nine packages. Audited versions
+above are authoritative and feed `teoclub.source.upstreamVersion` in each package manifest.
 
 ### Upstream lineage
 
@@ -132,7 +152,13 @@ Versions: `@teoclub/cordis` fixed at `5.0.0` (D5); the other eight packages
 continue their upstream version lines from the audited versions (independent
 SemVer, PRD §16.4).
 
-## TEO Club Patches (applied during Phase 3, Bun runtime adaptation)
+## TEO Club Patches (current)
+
+The authoritative ledger is `scripts/merge-teo.ts`' TEO_PATCHES table:
+`scripts/verify-teo-patches.ts` re-derives the divergence set from the pinned
+commit and fails when a file diverges without an entry, or when a `PROTECTED`
+path has gone missing. The prose below explains each entry; the table is what
+the build enforces.
 
 7. **`timer` public/internal types**: `NodeJS.Timeout` replaced with
    `ReturnType<typeof setTimeout>`; no source names `NodeJS.*` anymore
@@ -142,14 +168,13 @@ SemVer, PRD §16.4).
    `NodeJS.Timeout` -> `ReturnType<typeof setTimeout>` (include writeTask),
    `NodeJS.ErrnoException` casts -> `{ code?: string }` structural casts.
    Type-only; declarations no longer require `@types/node` to resolve.
-9. **`hmr` resolveSync parameter-order fix (behavioral bug)**: the vendored
-   v2 path called `resolveSync(parentURL, { specifier, attributes })`, but
-   released Node 24 (verified on 24.11.1) expects
-   `resolveSync(specifier, parentURL, importAttributes)` - the vendored call
-   threw inside `partialReload`, silently degrading every module reload to
-   zero (HMR was broken on current Node 24.x). `_resolve` now probes the
-   accepted signature once and dispatches accordingly, keeping the
-   prerelease shape working. Covered by `tests/node/hmr-node.spec.ts`.
+9. **DROPPED — `hmr` resolveSync parameter-order probe.** Rigo previously
+   worked around Node 24.0-24.11.1 reporting major 24 while still carrying the
+   v1 module loader. Upstream has since fixed this at the root: `loader/src/internal.ts`
+   `ModuleLoader.fromInternal()` classifies the loader by which module-job API
+   it owns (`getOrCreateModuleJob` = v2, `getModuleJobForImport` = v1) instead
+   of by Node major. The probe was deleted and `_resolve()` now dispatches on
+   `internal.version`. Verified on Node 24.14 by `tests/node/hmr-node.spec.ts`.
 10. **`hmr` Bun engine (D10)**: runtime detection (`engine/shared.ts`) +
     controlled full restart (`engine/bun.ts`): config-file refresh keeps the
     shared chokidar path; module changes under Bun close the watchers,
@@ -157,3 +182,55 @@ SemVer, PRD §16.4).
     `loader.exit()`. Node internals usage split into `engine/node.ts`.
     `bin.js` implements the restart contract (exit code 51 for an outer
     supervisor). Bare `bun --hot` is not used (FR-HMR-004).
+11. **`hmr` config-watch precedence (behavioral)**: the watcher matches a
+    booted Include's config path **before** the module-reload branches.
+    Upstream's post-revert handler checks `externals`/`loadCache` first and
+    only then looks for an Include, which misroutes config edits two ways -
+    under Bun `!this.internal` turns every `cordis.yml` edit into a full
+    process restart instead of an in-place refresh (SPEC §5.4 / D10), and in
+    Node a TypeScript config reached through `import()` sits in `loadCache`
+    and would be partially reloaded rather than refreshed. The handler also
+    keeps `add`/`unlink` listeners so creating or removing a config file
+    refreshes it. Covered by `tests/bun/hmr-bun.spec.ts` and
+    `tests/upstream/app-boot/tests/watch-config.spec.ts`.
+12. **`kit` README identity**: the `@teoclub/kit` title, npm badge, install
+    command, and the "continues cosmokit / not affiliated with cordiverse"
+    statement, re-applied over each new upstream README. `verify-old-scopes.ts`
+    gates it.
+
+## Re-sync record
+
+### 2026-09-18 — `dsh-v0.1.6-alpha.2` (`b150a55` -> `ddefc45`)
+
+Upstream's **revert of PR #932** ("transactional Cordis reload") dominates this
+sync. Adopted in full, by explicit decision:
+
+- **Loader/Group/Entry updates are eager and non-transactional again.** A
+  failed update no longer restores the previous plugin or config; the entry
+  keeps whatever the attempt reached, and the failure is reported rather than
+  rolled back. **This removes a capability the PRD required**: FR-LOADER-003
+  and SPEC §5.1.4 ("安全更新与回滚") are amended accordingly. What survives:
+  an edit the Include cannot read or parse leaves the running tree alone. What
+  does not: a syntactically valid candidate that fails to activate is still
+  assigned to the entry and persisted by the Include's debounced writer, so a
+  bad value can reach the config file.
+- **`Fiber.update()` returns nothing.** It no longer hands back the
+  `internal/update` waterfall result, so a plugin that throws during a
+  config-driven restart escapes as an unhandled rejection instead of reaching
+  the update caller. **Runtime-diff**: Node routes that through
+  `unhandledRejection`; Bun's test runner attributes it to the running test and
+  offers no hook to consume it, so the affected cases are Node-only.
+- **`Entry.update()` no longer re-imports on a `name` change.** The replace
+  branch is gone: a `name` edit is recorded and written back, but the running
+  fiber keeps its plugin until the entry is recreated.
+- **`Hmr.registerConfig()` and the `hmr/config-update-failed` event are
+  deleted.** Their only consumer moved: `packages/harness/app-boot/src/watch-config.ts`
+  now owns exact-path watching (TEO patch 11 keeps the precedence correct).
+- Adopted from upstream: the `loader/src/internal.ts` loader-shape fix (patch
+  9 dropped), the `cordis/src/logger.ts` exporter-disposer fix (the local G3
+  patch converged and its ledger entry was removed), and all nine version
+  bumps.
+- `@teoclub/cordis` moves 5.0.0 -> **6.0.0**: the revert removes public API
+  (`Hmr.registerConfig`, `Fiber.update()`'s return value), which is the BC-4
+  criterion the 5.0.0 line was declared under. Other packages continue their
+  upstream version lines.

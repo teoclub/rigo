@@ -16,6 +16,7 @@
  */
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
+import { materializeVendor } from './upstream-tree.ts'
 
 const VENDOR_DIRS = [
   'cosmokit',
@@ -102,11 +103,15 @@ async function main() {
     console.error('usage: bun scripts/audit-source.ts <harness-clone-path> <pinned-commit>')
     process.exit(1)
   }
-  const vendorRoot = join(clonePath, 'vendor')
-  if (!(await exists(vendorRoot))) {
-    console.error(`error: ${vendorRoot} not found - is this a deepseek-harness clone?`)
+  if (!(await exists(join(clonePath, 'vendor')))) {
+    console.error(`error: ${join(clonePath, 'vendor')} not found - is this a deepseek-harness clone?`)
     process.exit(1)
   }
+  // Read the pinned commit, never the clone's working tree: the checkout can
+  // sit at any revision, and a working-tree read mixes them into the audit.
+  const upstream = materializeVendor(clonePath, pinnedCommit, [...VENDOR_DIRS, 'README.md'])
+  process.on('exit', () => upstream.dispose())
+  const vendorRoot = join(upstream.root, 'vendor')
 
   const readme = await readText(join(vendorRoot, 'README.md'))
   const manifest = parseManifest(readme)

@@ -1,7 +1,16 @@
 /**
- * Transactional config replacement through the booted Include and Loader tree.
- * HMR contains rejected refreshes; direct callers receive the error after the
- * previous generation has been retained or restored.
+ * Config replacement through the booted Include and Loader tree.
+ *
+ * The Loader is eager and non-transactional (upstream reverted PR #932), so
+ * these cases pin the containment that still holds: `Include.refresh()` keeps
+ * the last good tree through an edit it cannot read or parse, and a failed
+ * update leaves its entry where the attempt reached rather than restoring the
+ * previous generation.
+ *
+ * Note what is NOT guaranteed any more: a syntactically valid candidate that
+ * fails to activate is still assigned to the entry, and the Include's debounced
+ * writer persists it. Only an edit the Include cannot parse leaves the file
+ * untouched.
  */
 
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -11,6 +20,22 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@teoclub/cordis'
 import type { Include } from '@teoclub/cordis-plugin-include'
 import { boot } from '@teoclub/harness-app-boot'
+
+/** `FiberState` is a const enum with no runtime object; freeze the values used here. */
+const FIBER_ACTIVE = 2
+const FIBER_FAILED = 3
+const FIBER_DISPOSED = 4
+
+/**
+ * Fiber state of a loader entry, or `undefined` when it has none.
+ *
+ * A stopped entry keeps its disposed fiber: the reverted Loader disposes the
+ * fiber in place rather than clearing the entry's reference, so "unloaded" is
+ * state 4, not `undefined`.
+ */
+function fiberState(ctx: Context, id: string): number | undefined {
+  return entryById(ctx, id).fiber?.state
+}
 
 const NAME = 'dsh-test-bin'
 
@@ -47,31 +72,61 @@ function plugin(name: string, body = ''): string {
   return `export default function ${name}(_ctx, config = {}) { ${body} }\n`
 }
 
-async function expectUpdateFailure(task: Promise<void>, stage: string): Promise<void> {
+/** Longer than one debounce window: the eager restart lands on a later tick. */
+function settle(ms = 100): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+const isNode = typeof (process.versions as { bun?: string }).bun === 'undefined'
+
+/**
+ * Runtime-diff: the cases below make a plugin throw during a config-driven
+ * restart, which the reverted `Fiber.update()` can no longer report to its
+ * caller. Node routes that through `unhandledRejection`, which the test
+ * captures; Bun's test runner attributes such a rejection to the running test
+ * and fails it outright, with no hook to consume it.
+ */
+const _it = isNode ? it : it.skip
+
+/**
+ * Run `body` while capturing rejections that escaped the Loader.
+ *
+ * Reverted `Fiber.update()` no longer returns the restart promise, so a plugin
+ * that throws during a config-driven restart reports through
+ * `unhandledRejection` rather than to the update caller. Capturing here pins
+ * that contract and keeps it from being reported as a test-runner failure.
+ * @param body - the steps whose escaped rejections to collect.
+ * @returns every rejection observed while `body` ran.
+ */
+async function withEscapedRejections(body: () => Promise<void>): Promise<Error[]> {
+  const rejections: Error[] = []
+  const capture = (reason: unknown) => { rejections.push(reason as Error) }
+  process.on('unhandledRejection', capture)
   try {
-    await task
-  } catch (error) {
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toContain(`failed to ${stage} loader entry`)
-    return
+    await body()
+  } finally {
+    process.off('unhandledRejection', capture)
   }
-  throw new Error(`expected loader update to fail during ${stage}`)
+  return rejections
 }
 
 describe('include refresh with an invalid file', () => {
-  it('rejects while keeping the last good tree, then applies the next valid edit', async () => {
+  it('keeps the last good tree through invalid edits, then applies the next valid one', async () => {
     const { ctx, dir, include } = await bootTree('- id: noop\n  name: ./noop.mjs\n  config:\n    value: 1\n')
     try {
       expect(entryConfig(ctx, 'noop')).toEqual({ value: 1 })
 
+      // `refresh()` logs and keeps the running tree instead of throwing: a
+      // hot-reload of a live app must never take the process down, and the
+      // last good generation stays mounted.
       writeFileSync(join(dir, 'cordis.yml'), 'invalid: [unclosed\n')
-      await expect(Promise.resolve(include.refresh())).rejects.toThrow('failed to parse config file')
+      await include.refresh()
       expect(entryConfig(ctx, 'noop')).toEqual({ value: 1 })
 
       // An empty file parses to `undefined` without a YAML error; it must be
-      // treated exactly like a parse failure, not crash the entry walk.
+      // rejected as a non-array the same way, not crash the entry walk.
       writeFileSync(join(dir, 'cordis.yml'), '')
-      await expect(Promise.resolve(include.refresh())).rejects.toThrow('failed to validate config file')
+      await include.refresh()
       expect(entryConfig(ctx, 'noop')).toEqual({ value: 1 })
 
       writeFileSync(join(dir, 'cordis.yml'), '- id: noop\n  name: ./noop.mjs\n  config:\n    value: 2\n')
@@ -84,8 +139,8 @@ describe('include refresh with an invalid file', () => {
   })
 })
 
-describe('loader entry replacement', () => {
-  it('imports a changed name before replacing the running plugin', async () => {
+describe('loader entry update', () => {
+  it('records a changed name without re-importing the running plugin', async () => {
     const { ctx } = await bootTree('- id: target\n  name: ./old.mjs\n', {
       'old.mjs': plugin('oldPlugin'),
       'new.mjs': plugin('newPlugin'),
@@ -93,43 +148,11 @@ describe('loader entry replacement', () => {
     try {
       const entry = entryById(ctx, 'target')
       await entry.update({ name: './new.mjs' })
+      // The revert dropped the Loader's replace branch: a `name` edit is
+      // recorded and written back, but the running fiber keeps its plugin
+      // until the entry is recreated (a later refresh or a restart).
       expect(entry.options.name).toBe('./new.mjs')
       expect(entry.parent.data.find(options => options.id === 'target')).toBe(entry.options)
-      expect(entry.fiber?.runtime?.callback.name).toBe('newPlugin')
-      expect(entry.options.disabled).toBeUndefined()
-      await entry.fiber?.await()
-    } finally {
-      await ctx.fiber.dispose()
-    }
-  })
-
-  it('retains the running plugin when the replacement cannot be imported', async () => {
-    const { ctx } = await bootTree('- id: target\n  name: ./old.mjs\n', {
-      'old.mjs': plugin('oldPlugin'),
-    })
-    try {
-      const entry = entryById(ctx, 'target')
-      const fiber = entry.fiber
-      await expectUpdateFailure(entry.update({ name: './missing.mjs' }), 'import')
-      expect(entry.options.name).toBe('./old.mjs')
-      expect(entry.fiber === fiber).toBe(true)
-      await fiber?.await()
-    } finally {
-      await ctx.fiber.dispose()
-    }
-  })
-
-  it('restores the previous plugin after replacement application fails', async () => {
-    const { ctx } = await bootTree('- id: target\n  name: ./old.mjs\n', {
-      'old.mjs': plugin('oldPlugin'),
-      'bad.mjs': plugin('badPlugin', 'throw new Error("candidate apply failed")'),
-    })
-    try {
-      const entry = entryById(ctx, 'target')
-      const previous = entry.fiber
-      await expectUpdateFailure(entry.update({ name: './bad.mjs' }), 'apply')
-      expect(entry.options.name).toBe('./old.mjs')
-      expect(entry.fiber === previous).toBe(false)
       expect(entry.fiber?.runtime?.callback.name).toBe('oldPlugin')
       expect(entry.options.disabled).toBeUndefined()
       await entry.fiber?.await()
@@ -138,23 +161,45 @@ describe('loader entry replacement', () => {
     }
   })
 
-  it('restores the previous config when an in-place restart fails', async () => {
-    const { ctx } = await bootTree('- id: target\n  name: ./configurable.mjs\n  config:\n    fail: false\n', {
-      'configurable.mjs': plugin('configurablePlugin', 'if (config.fail) throw new Error("candidate config failed")'),
+  it('accepts a name pointing at an unimportable module, keeping the running plugin', async () => {
+    const { ctx } = await bootTree('- id: target\n  name: ./old.mjs\n', {
+      'old.mjs': plugin('oldPlugin'),
     })
     try {
       const entry = entryById(ctx, 'target')
       const fiber = entry.fiber
-      await expectUpdateFailure(entry.update({ config: { fail: true } }), 'apply')
-      expect(entry.options.config).toEqual({ fail: false })
+      await entry.update({ name: './missing.mjs' })
+      expect(entry.options.name).toBe('./missing.mjs')
       expect(entry.fiber === fiber).toBe(true)
+      expect(entry.fiber?.runtime?.callback.name).toBe('oldPlugin')
       await fiber?.await()
     } finally {
       await ctx.fiber.dispose()
     }
   })
 
-  it('does not persist a failed direct fiber update', async () => {
+  _it('keeps the attempted config and fails the fiber when an in-place restart fails', async () => {
+    const { ctx } = await bootTree('- id: target\n  name: ./configurable.mjs\n  config:\n    fail: false\n', {
+      'configurable.mjs': plugin('configurablePlugin', 'if (config.fail) throw new Error("candidate config failed")'),
+    })
+    try {
+      const entry = entryById(ctx, 'target')
+      const rejections = await withEscapedRejections(async () => {
+        await entry.update({ config: { fail: true } })
+        await settle()
+      })
+      // No rollback: the entry carries the attempted config, its fiber has
+      // failed, and the failure surfaced rather than being swallowed - which
+      // is what the boot audit turns into a diagnostic on the next start.
+      expect(entry.options.config).toEqual({ fail: true })
+      expect(entry.fiber?.state).toBe(FIBER_FAILED)
+      expect(rejections.map(error => error.message)).toContain('candidate config failed')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  _it('writes a direct fiber update through to the entry even when the restart fails', async () => {
     const { ctx } = await bootTree('- id: target\n  name: ./configurable.mjs\n  config:\n    fail: false\n', {
       'configurable.mjs': plugin('configurablePlugin', 'if (config.fail) throw new Error("candidate config failed")'),
     })
@@ -162,9 +207,18 @@ describe('loader entry replacement', () => {
       const entry = entryById(ctx, 'target')
       const fiber = entry.fiber
       if (!fiber) throw new Error('target entry has no fiber')
-      await expect(Promise.resolve(fiber.update({ fail: true }))).rejects.toThrow('candidate config failed')
-      expect(entry.options.config).toEqual({ fail: false })
-      expect(entry.parent.data.find(options => options.id === 'target')).toBe(entry.options)
+      const rejections = await withEscapedRejections(async () => {
+        // `update()` returns nothing now: the restart runs behind the
+        // `internal/update` waterfall and the caller cannot await it.
+        expect(fiber.update({ fail: true })).toBeUndefined()
+        await settle()
+      })
+      expect(rejections.map(error => error.message)).toContain('candidate config failed')
+      // The Loader's `internal/update` listener writes the raw config through
+      // to the entry before the restart runs, so the failed config is what the
+      // entry now carries; the tree's own row object is the one updated.
+      expect((entry.options.config as { fail?: boolean }).fail).toBe(true)
+      expect(entry.parent.data.find(options => options.id === 'target') === entry.options).toBe(true)
     } finally {
       await ctx.fiber.dispose()
     }
@@ -172,7 +226,7 @@ describe('loader entry replacement', () => {
 })
 
 describe('loader tree replacement', () => {
-  it('rolls back earlier updates and additions when a later entry fails', async () => {
+  it('applies what it can and contains the row that fails', async () => {
     const { ctx, dir, include } = await bootTree([
       '- id: existing',
       '  name: ./configurable.mjs',
@@ -195,10 +249,18 @@ describe('loader tree replacement', () => {
         '  name: ./bad.mjs',
         '',
       ].join('\n'))
-      await expect(Promise.resolve(include.refresh())).rejects.toThrow('failed to apply loader entry bad')
-      expect(entryConfig(ctx, 'existing')).toEqual({ value: 'old' })
-      expect([...ctx.loader.entries()].some(entry => entry.options.id === 'added')).toBe(false)
-      expect([...ctx.loader.entries()].some(entry => entry.options.id === 'bad')).toBe(false)
+      // No rollback: the update is eager, so the earlier row and the addition
+      // both land and only the failing row is left unloaded. Creating a row
+      // with an unimportable/throwing plugin is caught and logged by the
+      // group, so nothing escapes to the caller.
+      await include.refresh()
+      await ctx.loader.await()
+      await settle()
+      // Narrow assertions: comparing a whole entry or fiber makes vitest's
+      // serializer walk Cordis internals and mask the real failure.
+      expect((entryConfig(ctx, 'existing') as { value?: string } | undefined)?.value).toBe('candidate')
+      expect(fiberState(ctx, 'added')).toBe(FIBER_ACTIVE)
+      expect(fiberState(ctx, 'bad')).toBe(FIBER_FAILED)
 
       writeFileSync(join(dir, 'cordis.yml'), [
         '- id: existing',
@@ -210,8 +272,11 @@ describe('loader tree replacement', () => {
         '',
       ].join('\n'))
       await include.refresh()
-      expect(entryConfig(ctx, 'existing')).toEqual({ value: 'committed' })
-      expect(entryById(ctx, 'added').fiber).toBeDefined()
+      await ctx.loader.await()
+      expect((entryConfig(ctx, 'existing') as { value?: string } | undefined)?.value).toBe('committed')
+      expect(fiberState(ctx, 'added')).toBe(FIBER_ACTIVE)
+      // the recovered tree no longer carries the row that failed
+      expect([...ctx.loader.entries()].some(entry => entry.options.id === 'bad')).toBe(false)
     } finally {
       await ctx.fiber.dispose()
     }
@@ -236,21 +301,24 @@ describe('loader tree replacement', () => {
 
       writeFileSync(join(dir, 'cordis.yml'), config(false))
       await include.refresh()
-      expect(entryById(ctx, 'child').fiber).toBeDefined()
+      await settle()
+      expect(fiberState(ctx, 'child')).toBe(FIBER_ACTIVE)
 
       writeFileSync(join(dir, 'cordis.yml'), config(true))
       await include.refresh()
-      expect(entryById(ctx, 'child').fiber).toBeUndefined()
+      await settle()
+      expect(fiberState(ctx, 'child')).toBe(FIBER_DISPOSED)
 
       writeFileSync(join(dir, 'cordis.yml'), config(false))
       await include.refresh()
-      expect(entryById(ctx, 'child').fiber).toBeDefined()
+      await settle()
+      expect(fiberState(ctx, 'child')).toBe(FIBER_ACTIVE)
     } finally {
       await ctx.fiber.dispose()
     }
   })
 
-  it('restores a programmatic entry move when its update fails', async () => {
+  _it('keeps a programmatic entry move that then fails to update', async () => {
     const { ctx } = await bootTree('- id: noop\n  name: ./noop.mjs\n', {
       'movable.mjs': plugin('movablePlugin', 'if (config.fail) throw new Error("candidate config failed")'),
     })
@@ -259,20 +327,23 @@ describe('loader tree replacement', () => {
       const targetId = await ctx.loader.create({ name: './movable.mjs', config: { fail: false } })
       const target = entryById(ctx, targetId)
       const source = target.parent
-      const sourceIndex = source.data.indexOf(target.options)
       const destination = entryById(ctx, groupId).subgroup
       if (!destination) throw new Error('created loader group has no subgroup')
 
-      await expectUpdateFailure(
-        ctx.loader.update(targetId, { config: { fail: true } }, groupId),
-        'apply',
-      )
+      const rejections = await withEscapedRejections(async () => {
+        await ctx.loader.update(targetId, { config: { fail: true } }, groupId)
+        await settle()
+      })
 
-      expect(target.parent).toBe(source)
-      expect(Object.getPrototypeOf(target.ctx)).toBe(source.ctx)
-      expect(source.data.indexOf(target.options)).toBe(sourceIndex)
-      expect(destination.data).not.toContain(target.options)
-      expect(target.options.config).toEqual({ fail: false })
+      // The move happens before the update, and the revert removed the
+      // rollback, so the entry stays in its destination carrying the config
+      // the attempt reached - only the failure is reported.
+      expect(target.parent).toBe(destination)
+      expect(Object.getPrototypeOf(target.ctx)).toBe(destination.ctx)
+      expect(destination.data).toContain(target.options)
+      expect(source.data).not.toContain(target.options)
+      expect(target.options.config).toEqual({ fail: true })
+      expect(rejections.map(error => error.message)).toContain('candidate config failed')
     } finally {
       await ctx.fiber.dispose()
     }

@@ -11,10 +11,18 @@ TEO Club and is not affiliated with cordiverse.
 
 ## Usage
 
+### Node.js
+
 ```sh
 npm install @teoclub/kit
 ```
 
 ```ts
 import * as kit from '@teoclub/kit'
+```
+
+### Deno
+
+```ts
+import * as kit from 'npm:@teoclub/kit@latest'
 ```

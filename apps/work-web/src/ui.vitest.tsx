@@ -6,17 +6,23 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { App } from './app.tsx'
 import {
   ActionResultsPanel,
-  App,
   ApprovalsPanel,
   AuditTimeline,
   ChatView,
   SessionCreateForm,
 } from './components.tsx'
 import { WorkApiClient, type ApprovalRecord, type AuditEntry, type SseFrame, type SessionSnapshot } from './api.ts'
+import { SESSION_SETTINGS_KEY } from './forms.tsx'
+import { READ_STATE_KEY } from './read-state.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.removeItem(SESSION_SETTINGS_KEY)
+  localStorage.removeItem(READ_STATE_KEY)
+})
 
 function sessionSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
@@ -47,21 +53,24 @@ function retrievalFrame(seq: number, status: 'found' | 'empty', sourceIds: strin
 
 /** A stub client: create/open work against local state; the stream emits canned frames. */
 function stubClient(frames: SseFrame[] = []): WorkApiClient & { emitted: SseFrame[] } {
-  const created: SessionSnapshot[] = []
-  const client = new WorkApiClient('http://127.0.0.1:0') as WorkApiClient & { emitted: SseFrame[] }
-  client.emitted = []
-  client.createSession = async (input) => {
-    const snapshot = sessionSnapshot({
-      providerId: input.providerId,
-      modelId: input.modelId,
-      cwd: input.workspaceRoot,
-      ...(input.title === undefined ? {} : { title: input.title }),
-    })
-    created.push(snapshot)
-    return snapshot
-  }
-  client.getSession = async (id) => (created.find((s) => s.sessionId === id) ?? undefined)
-  client.sendMessage = async () => ({ turnId: 'turn_1', status: 'accepted' })
+    const created: SessionSnapshot[] = []
+    const client = new WorkApiClient('http://127.0.0.1:0') as WorkApiClient & { emitted: SseFrame[] }
+    client.emitted = []
+    client.createSession = async (input) => {
+      const snapshot = sessionSnapshot({
+        providerId: input.providerId,
+        modelId: input.modelId,
+        cwd: input.workspaceRoot,
+        ...(input.title === undefined ? {} : { title: input.title }),
+      })
+      created.push(snapshot)
+      return snapshot
+    }
+    client.getSession = async (id) => (created.find((s) => s.sessionId === id) ?? undefined)
+    client.listSessions = async () => [...created]
+    client.resumeSession = async () => undefined
+    client.health = async () => ({ status: 'ok', runtime: 'ready', database: 'ok' })
+    client.sendMessage = async () => ({ turnId: 'turn_1', status: 'accepted' })
   client.openEventStream = async (_id, handlers) => {
     for (const frame of frames) {
       if (handlers.signal?.aborted) return
@@ -244,9 +253,12 @@ describe('work web components (Issue 033)', () => {
   it('app flow: create → chat, and open restores an existing session', async () => {
     const client = stubClient([chunkFrame(1, 'restored answer')])
     const { unmount } = render(<App client={client} />)
+    expect(screen.queryByTestId('provider')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     fireEvent.change(screen.getByTestId('provider'), { target: { value: 'openai-compatible' } })
     fireEvent.change(screen.getByTestId('model'), { target: { value: 'default' } })
     fireEvent.change(screen.getByTestId('workspaceRoot'), { target: { value: '/tmp/ws' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     fireEvent.click(screen.getByTestId('createButton'))
     await waitFor(() => expect(screen.getByTestId('sessionTitle').textContent).toContain('session_ui'))
     // The opened session replays its stream (restore of existing events).
@@ -256,10 +268,86 @@ describe('work web components (Issue 033)', () => {
     const openClient = stubClient([])
     openClient.getSession = async () => undefined
     const { unmount: unmountSecond } = render(<App client={openClient} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     fireEvent.change(screen.getByTestId('sessionId'), { target: { value: 'session_ghost' } })
     fireEvent.click(screen.getByTestId('openButton'))
     await waitFor(() => expect(screen.getByTestId('openError').textContent).toContain('was not found'))
     unmountSecond()
     void act
+  })
+
+  it('fills the composer from a suggestion chip and forwards the first message', async () => {
+    const client = stubClient()
+    let created: SessionSnapshot | undefined
+    let first: string | undefined
+    render(
+      <SessionCreateForm
+        client={client}
+        suggestions={['Summarize the workspace']}
+        onCreated={(s, message) => {
+          created = s
+          first = message
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('suggestion-0'))
+    fireEvent.change(screen.getByTestId('provider'), { target: { value: 'openai-compatible' } })
+    fireEvent.change(screen.getByTestId('model'), { target: { value: 'default' } })
+    fireEvent.change(screen.getByTestId('workspaceRoot'), { target: { value: '/tmp/ws' } })
+    fireEvent.click(screen.getByTestId('createButton'))
+    await waitFor(() => expect(created).toBeDefined())
+    expect(first).toBe('Summarize the workspace')
+  })
+
+  it('auto-sends the initial chat message and treats a replay as success', async () => {
+    const client = stubClient([chunkFrame(1, 'first turn')])
+    const sent: string[] = []
+    client.sendMessage = async (_id, content) => {
+      sent.push(content)
+      return { turnId: 'turn_1', status: sent.length === 1 ? 'accepted' : 'replayed' }
+    }
+    render(
+      <ChatView
+        session={sessionSnapshot()}
+        client={client}
+        onDisconnected={() => undefined}
+        initialMessage="Hello from home"
+      />,
+    )
+    await waitFor(() => expect(sent[0]).toBe('Hello from home'))
+    expect(screen.queryByTestId('sendError')).toBeNull()
+    await waitFor(() => expect(screen.getByTestId('assistantOutput').textContent).toContain('first turn'))
+  })
+
+  it('renders the session list, unread dots and mark-all-read', async () => {
+    const client = stubClient([])
+    client.listSessions = async () => [
+      sessionSnapshot({
+        sessionId: 'session_alpha',
+        title: 'Alpha',
+        lastSeq: 4,
+        cwd: '/Users/a08/work/rigo',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ]
+    render(<App client={client} />)
+    await waitFor(() => expect(screen.getByTestId('nav-session-session_alpha').textContent).toContain('Alpha'))
+    expect(screen.getByTestId('unread-session_alpha')).toBeDefined()
+    expect(screen.getByRole('heading', { name: 'Rigo Work' }).textContent).toBe('Rigo Work')
+    expect(document.body.textContent).toContain('Welcome back, a08')
+    fireEvent.click(screen.getByTestId('markAllRead'))
+    await waitFor(() => expect(screen.queryByTestId('unread-session_alpha')).toBeNull())
+  })
+
+  it('keeps session fields in Settings and still validates from the home composer', async () => {
+    render(<App client={stubClient()} />)
+    expect(screen.queryByTestId('provider')).toBeNull()
+    expect(screen.queryByTestId('sessionId')).toBeNull()
+    fireEvent.click(screen.getByTestId('createButton'))
+    await waitFor(() => expect(screen.getByTestId('createError').textContent).toContain('Provider is required.'))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByTestId('settingsDialog')).toBeDefined()
+    expect(screen.getByTestId('provider')).toBeDefined()
+    expect(screen.getByTestId('sessionId')).toBeDefined()
   })
 })

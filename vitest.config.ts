@@ -21,7 +21,7 @@ export default defineConfig({
     // Only this repo's suites: an unbounded default glob would also pick up
     // vendor/cordis (the sibling checkout's own tests). The Rigo Work Web
     // app's unit/component suites join under apps/work-web (jsdom per-file).
-    include: ['tests/**/*.spec.ts', 'apps/work-web/src/**/*.test.ts', 'apps/work-web/src/**/*.vitest.tsx'],
+    include: ['tests/**/*.spec.ts', 'apps/work-web/src/**/*.test.ts', 'apps/work-web/src/**/*.vitest.tsx', 'apps/cli/src/**/*.test.ts'],
     // The Playwright E2E suites (Issues 037/038) run under their own runner
     // (`bun run e2e`), not vitest or Bun.
     exclude: ['tests/e2e/**'],

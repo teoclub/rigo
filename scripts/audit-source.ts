@@ -145,11 +145,22 @@ if (upstreamLicense === null) {
 // 4. KEEP rewrite-identity: re-derive and byte-compare against the clone.
 // ---------------------------------------------------------------------------
 const clone = resolve(process.env.RIGO_UPSTREAM_CLONE ?? '/Users/a08/work/NodeProjects/deepseek-harness')
+/**
+ * A clone is usable when it CONTAINS the pinned commit — not when its working
+ * tree happens to be checked out there.
+ *
+ * Every read below addresses the commit by SHA (`ls-tree`, `show`), so HEAD
+ * plays no part in any of them. Requiring it anyway did not make the check
+ * stricter, it made it *silently inoperative*: this repository carries two
+ * upstream pins (the harness baseline, and the commit the vendored Cordis
+ * family tracks), and no single checkout can be at both. The check then sat
+ * behind a warning that read like a missing clone.
+ */
 const cloneUsable = (() => {
   if (!existsSync(join(clone, '.git'))) return false
   try {
-    const head = execFileSync('git', ['-C', clone, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-    return head === BASELINE.commit
+    execFileSync('git', ['-C', clone, 'cat-file', '-e', `${BASELINE.commit}^{commit}`], { stdio: 'ignore' })
+    return true
   } catch {
     return false
   }
@@ -185,6 +196,14 @@ if (cloneUsable) {
       const rel = relative(spec.upstreamPath, upstreamFile)
       const ported = portTestFile(spec, upstreamFile, rel, gitShow(upstreamFile))
       if (ported.omitted) continue
+      // A declared, substitution-free adaptation is a hand-maintained file:
+      // the local edit is behavioral and no textual rewrite reproduces it, so
+      // byte identity is not a property this file can have. The declaration
+      // (and its reason) is what the check verifies instead — the same bargain
+      // ADAPT packages make for their sources. A declared adaptation whose
+      // substitutions stopped matching is NOT this case: `portTestFile`
+      // throws on it rather than letting it drift into this branch.
+      if (ported.handMaintained) continue
       const localFile = join(localTestDir, rel)
       if (!existsSync(localFile) || readFileSync(localFile, 'utf8') !== ported.text) {
         fail(`${spec.localPackage}: test ${rel} drifts from the port pipeline output`)
@@ -194,7 +213,7 @@ if (cloneUsable) {
   }
   if (drift === 0) ok('all KEEP sources and all ported tests are rewrite-identical to the pinned baseline')
 } else {
-  warn(`no clone at the pinned commit (${clone}); KEEP rewrite-identity not checked (set RIGO_UPSTREAM_CLONE)`)
+  warn(`no clone containing the pinned commit ${BASELINE.commit.slice(0, 12)} (${clone}); KEEP rewrite-identity not checked (set RIGO_UPSTREAM_CLONE)`)
 }
 
 // ---------------------------------------------------------------------------

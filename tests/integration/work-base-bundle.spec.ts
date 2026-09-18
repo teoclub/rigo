@@ -179,6 +179,77 @@ describe.skipIf(isBun)('rigo work base bundle (Node)', async () => {
     }
   })
 
+  it('lists sessions through the persistence seam and resumes the agent after a restart', async () => {
+    const dir = tempDir()
+    const workspace = join(dir, 'workspace')
+    const dataDir = join(dir, 'data')
+    mkdirSync(workspace, { recursive: true })
+    mkdirSync(dataDir, { recursive: true })
+    const adapters = { mock: new MockAdapter([textResponse('first answer'), textResponse('resumed answer')]) }
+    let sessionId = ''
+
+    // First run: create with API fields and answer one turn (the answered
+    // turn materializes the durable row).
+    {
+      const handle = await mods().bootWorkBase({ adapters }, { dataDir, port: 0, provider: 'mock', model: 'mock' })
+      try {
+        const facade = handle.ctx.get('facade') as import('@teoclub/api-sdk').RuntimeFacade
+        const created = await facade.createSession({ cwd: workspace, providerId: 'mock', modelId: 'mock', title: 'across restarts' })
+        sessionId = created.sessionId
+        facade.sendMessage(sessionId, 'hello there', 'restart-msg-1')
+        const session = handle.ctx.sessions.get(sessionId as never)
+        const deadline = Date.now() + 10000
+        while (!session.events.some((event) => event.type === 'assistant/message') && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+        expect(session.events.some((event) => event.type === 'assistant/message')).toBe(true)
+        // The live list already carries the creation title.
+        const live = await facade.listSessions()
+        expect(live.some((row) => row.sessionId === sessionId && row.title === 'across restarts')).toBe(true)
+      } finally {
+        await handle.dispose()
+      }
+    }
+
+    // Second run over the same dataDir: the durable list survives the
+    // restart and the agent resumes with its metadata backfilled.
+    {
+      const handle = await mods().bootWorkBase({ adapters }, { dataDir, port: 0, provider: 'mock', model: 'mock' })
+      try {
+        const facade = handle.ctx.get('facade') as import('@teoclub/api-sdk').RuntimeFacade
+        const listed = await facade.listSessions()
+        const row = listed.find((candidate) => candidate.sessionId === sessionId)
+        expect(row).toBeDefined()
+        expect(row).toMatchObject({
+          title: 'across restarts',
+          providerId: 'mock',
+          modelId: 'mock',
+          cwd: workspace,
+          status: 'active',
+          agentStatus: 'unavailable',
+        })
+        expect(row!.eventCount).toBeGreaterThan(0)
+
+        const resumed = await facade.resumeSession(sessionId)
+        expect(resumed).toMatchObject({ sessionId, title: 'across restarts', agentStatus: 'idle' })
+        // The replayed log is intact and the loop answers a new message.
+        const session = handle.ctx.sessions.get(sessionId as never)
+        expect(session.events.some((event) => JSON.stringify(event.data).includes('first answer'))).toBe(true)
+        facade.sendMessage(sessionId, 'still there', 'restart-msg-2')
+        const deadline = Date.now() + 10000
+        while (!session.events.filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer')) && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+        expect(session.events.filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer'))).toBe(true)
+        // Unknown ids stay undefined (the HTTP layer maps them to 404).
+        await expect(facade.resumeSession('session_ghost')).resolves.toBeUndefined()
+      } finally {
+        await handle.dispose()
+      }
+    }
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('supports disabling the write tool at boot while keeping reads (AC-6)', async () => {
     const dir = tempDir()
     const workspace = join(dir, 'workspace')

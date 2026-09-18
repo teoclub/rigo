@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@teoclub/cordis'
 import { Session, SessionId, type SessionEvent, type SessionHeader } from '@teoclub/harness-session'
+import type { ApiSessionRow } from '@teoclub/harness-session-persistence'
 import { runCoordinatorContract, type CoordinatorFixture } from '../upstream/session-persistence/tests/coordinator-contract.ts'
 
 /**
@@ -264,6 +265,130 @@ describe.skipIf(isBun)('sqlite session persistence (Issue 008)', () => {
       expect(stored.events[99_999]!.seq).toBe(99_999)
       // Reference-load sanity bound: far below any interactive threshold.
       expect(elapsed).toBeLessThan(30_000)
+    } finally {
+      await ctx.fiber.dispose()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('creates the session_api_fields side table as version 4 of the composed set', async () => {
+    const { SESSION_PERSISTENCE_MIGRATIONS, SESSION_API_FIELDS_MIGRATION } = await import('@teoclub/shared-session-persistence-sqlite') as SqliteFace
+    const { ACTION_MIGRATIONS } = await import('@teoclub/shared-actions') as typeof import('@teoclub/shared-actions')
+    const { APPROVAL_MIGRATIONS } = await import('@teoclub/shared-approvals') as typeof import('@teoclub/shared-approvals')
+    const { NodeSqliteDriver } = await import('@teoclub/shared-storage-sqlite-node/node') as typeof import('@teoclub/shared-storage-sqlite-node/node')
+    const { runMigrations } = await import('@teoclub/shared-storage-sqlite-node/definition') as typeof import('@teoclub/shared-storage-sqlite-node/definition')
+    const dir = tempDir()
+    const driver = new NodeSqliteDriver(join(dir, 'rigo.sqlite'))
+    try {
+      // Version 4 continues the shared session database (1 = session tables,
+      // 2 = action_executions, 3 = approvals).
+      expect(SESSION_API_FIELDS_MIGRATION.version).toBe(4)
+      runMigrations(driver, {
+        migrations: [...SESSION_PERSISTENCE_MIGRATIONS, ...ACTION_MIGRATIONS, ...APPROVAL_MIGRATIONS, SESSION_API_FIELDS_MIGRATION],
+      })
+      const applied = driver.query<{ version: number }>('SELECT version FROM schema_migrations ORDER BY version').map((row) => row.version)
+      expect(applied).toEqual([1, 2, 3, 4])
+      const columns = driver.query<{ name: string }>('PRAGMA table_info(session_api_fields)').map((row) => row.name)
+      expect(columns).toEqual(['id', 'provider_id', 'model_id', 'title', 'updated_at'])
+      // The side table is deliberately NOT part of the standalone set: the
+      // version gap keeps it out of core-only compositions.
+      const standalone = new NodeSqliteDriver(join(dir, 'standalone.sqlite'))
+      try {
+        expect(() => runMigrations(standalone, {
+          migrations: [...SESSION_PERSISTENCE_MIGRATIONS, SESSION_API_FIELDS_MIGRATION],
+        })).toThrow(/not sequential/)
+      } finally {
+        standalone.close()
+      }
+    } finally {
+      driver.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('upserts api fields without the sessions row and lists merged rows newest-first', async () => {
+    const { default: SqliteSessionPersistence, SESSION_PERSISTENCE_MIGRATIONS, SESSION_API_FIELDS_MIGRATION } = await import('@teoclub/shared-session-persistence-sqlite') as SqliteFace
+    const { ACTION_MIGRATIONS } = await import('@teoclub/shared-actions') as typeof import('@teoclub/shared-actions')
+    const { APPROVAL_MIGRATIONS } = await import('@teoclub/shared-approvals') as typeof import('@teoclub/shared-approvals')
+    const { Context } = await import('@teoclub/cordis') as typeof import('@teoclub/cordis')
+    const { SessionStore, SESSION_FORMAT_VERSION } = await import('@teoclub/harness-session') as typeof import('@teoclub/harness-session')
+    const { NodeSqliteDriver } = await import('@teoclub/shared-storage-sqlite-node/node') as typeof import('@teoclub/shared-storage-sqlite-node/node')
+    const dir = tempDir()
+    const path = join(dir, 'rigo.sqlite')
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SqliteSessionPersistence as never, {
+      path,
+      migrations: [...SESSION_PERSISTENCE_MIGRATIONS, ...ACTION_MIGRATIONS, ...APPROVAL_MIGRATIONS, SESSION_API_FIELDS_MIGRATION],
+    })
+    try {
+      const persistence = ctx.get('sessionPersistence') as unknown as {
+        create(meta: SessionHeader): Promise<void>
+        appendBatch(meta: SessionHeader, events: readonly SessionEvent[], materialized: boolean): Promise<void>
+        setApiFields(id: SessionId, fields: { providerId?: string; modelId?: string; title?: string }): Promise<void>
+        listApiSessions(): Promise<ApiSessionRow[]>
+      }
+      const a = SessionId('session_a')
+      const b = SessionId('session_b')
+      const headerA: SessionHeader = { version: SESSION_FORMAT_VERSION, id: a, createdAt: 1, cwd: '/tmp/ws-a' }
+      const headerB: SessionHeader = { version: SESSION_FORMAT_VERSION, id: b, createdAt: 2, cwd: '/tmp/ws-b' }
+      await persistence.create(headerA)
+      await persistence.appendBatch(headerA, [
+        { type: 'turn/start' as const, seq: 0, time: 1, data: { turn: 1 } },
+        { type: 'turn/end' as const, seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+      ], false)
+      // No FK on the side table: api fields can land inside the lazy window
+      // before the sessions row materializes.
+      await persistence.setApiFields(b, { providerId: 'antml', modelId: 'fable-5' })
+      const early = await persistence.listApiSessions()
+      expect(early).toHaveLength(1)
+      expect(early[0]!.id).toBe(a)
+      await persistence.create(headerB)
+      await persistence.appendBatch(headerB, [
+        { type: 'turn/start' as const, seq: 0, time: 1, data: { turn: 1 } },
+      ], false)
+      // Partial upserts merge: a title-only call keeps provider/model.
+      await persistence.setApiFields(b, { title: 'Ship the list endpoint' })
+      await persistence.setApiFields(a, { title: 'First' })
+
+      // Pin the timestamps so the ordering assertion is deterministic: b has
+      // the newer event log, but a's api-field update outranks it (MAX of the
+      // two sides, per row).
+      const probe = new NodeSqliteDriver(path)
+      try {
+        probe.run('UPDATE sessions SET updated_at = ? WHERE id = ?', ['2026-01-02T00:00:00.000Z', a])
+        probe.run('UPDATE sessions SET updated_at = ? WHERE id = ?', ['2026-01-03T00:00:00.000Z', b])
+        probe.run('UPDATE session_api_fields SET updated_at = ? WHERE id = ?', ['2026-01-01T00:00:00.000Z', b])
+        probe.run('UPDATE session_api_fields SET updated_at = ? WHERE id = ?', ['2026-01-04T00:00:00.000Z', a])
+      } finally {
+        probe.close()
+      }
+
+      const rows = await persistence.listApiSessions()
+      expect(rows.map((row) => row.id)).toEqual([a, b])
+      expect(rows[0]).toMatchObject({
+        id: a,
+        status: 'active',
+        cwd: '/tmp/ws-a',
+        title: 'First',
+        eventCount: 2,
+        lastSeq: 1,
+        updatedAt: '2026-01-04T00:00:00.000Z',
+      })
+      // Provider/model were never set for a: the members stay absent.
+      expect(rows[0]).not.toHaveProperty('providerId')
+      expect(rows[0]).not.toHaveProperty('modelId')
+      expect(rows[1]).toMatchObject({
+        id: b,
+        status: 'active',
+        cwd: '/tmp/ws-b',
+        providerId: 'antml',
+        modelId: 'fable-5',
+        title: 'Ship the list endpoint',
+        eventCount: 1,
+        lastSeq: 0,
+        updatedAt: '2026-01-03T00:00:00.000Z',
+      })
     } finally {
       await ctx.fiber.dispose()
       rmSync(dir, { recursive: true, force: true })

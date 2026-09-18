@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SessionId } from '@teoclub/harness-session'
 import { DocumentId } from '@teoclub/work-documents'
-import { startHarness, happyPathScript, E2E_SECRET_MARKER } from './harness.ts'
+import { startHarness, happyPathScript, E2E_SECRET_MARKER, fillWorkSettings } from './harness.ts'
 
 test('happy path: knowledge answer, sources, approved write, audit', async ({ page }) => {
   const harness = await startHarness({
@@ -32,11 +32,13 @@ test('happy path: knowledge answer, sources, approved write, audit', async ({ pa
     await page.goto(harness.baseUrl)
     await expect(page.getByRole('heading', { name: 'Rigo Work' })).toBeVisible()
 
-    // Create the session through the UI form.
-    await page.getByTestId('provider').fill('mock')
-    await page.getByTestId('model').fill('mock')
-    await page.getByTestId('workspaceRoot').fill(harness.workspace)
-    await page.getByTestId('title').fill('E2E session')
+    // Create the session through the UI form (session fields live in Settings).
+    await fillWorkSettings(page, {
+      provider: 'mock',
+      model: 'mock',
+      workspaceRoot: harness.workspace,
+      title: 'E2E session',
+    })
     await page.getByTestId('createButton').click()
     await expect(page.getByTestId('sessionTitle')).toContainText('E2E session')
 

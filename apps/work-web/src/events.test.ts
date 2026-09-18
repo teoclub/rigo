@@ -128,4 +128,40 @@ describe('work web event derivation (Issue 033)', () => {
     expect(chunkText({ chunk: {} })).toEqual({})
     expect(chunkText({})).toEqual({})
   })
+
+  it('reconstructs a multi-turn transcript from user messages and turn boundaries', () => {
+    let view = initialViewModel()
+    view = foldEvent(view, frame('session.event', { seq: 0, type: 'turn/start', payload: { turn: 1 } }))
+    view = foldEvent(view, frame('session.event', {
+      seq: 1,
+      type: 'user/message',
+      payload: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'first question' }] },
+    }))
+    view = foldEvent(view, frame('session.event', {
+      seq: 2,
+      type: 'assistant/chunk',
+      payload: { turn: 1, step: 1, chunk: { type: 'text', text: 'first answer' } },
+    }))
+    view = foldEvent(view, frame('session.event', { seq: 3, type: 'turn/end', payload: { turn: 1, reason: { kind: 'completed' } } }))
+    expect(view.messages).toEqual([{ id: 'user-1', role: 'user', text: 'first question' }])
+    expect(view.assistantText).toBe('first answer')
+
+    view = foldEvent(view, frame('session.event', { seq: 4, type: 'turn/start', payload: { turn: 2 } }))
+    expect(view.messages).toEqual([
+      { id: 'user-1', role: 'user', text: 'first question' },
+      { id: 'assistant-1', role: 'assistant', text: 'first answer' },
+    ])
+    expect(view.assistantText).toBe('')
+    view = foldEvent(view, frame('session.event', {
+      seq: 5,
+      type: 'user/message',
+      payload: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'second question' }] },
+    }))
+    view = foldEvent(view, frame('session.event', {
+      seq: 6,
+      type: 'user/message',
+      payload: { role: 'user', source: { kind: 'plugin', plugin: 'agent-instructions' }, content: [{ type: 'text', text: 'injected context' }] },
+    }))
+    expect(view.messages.map((message) => message.text)).toEqual(['first question', 'first answer', 'second question'])
+  })
 })

@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/cordis-plugin-hmr",
   "description": "Hot Module Replacement Plugin for Cordis",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -23,12 +23,13 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/hmr",
       "upstreamPackage": "@deepseek-ai/cordis-plugin-hmr",
-      "upstreamVersion": "1.0.16",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+      "upstreamVersion": "1.0.17",
+      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
     }
   },
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "types": "./lib/types/index.d.ts",
       "import": "./lib/index.js"
     },
@@ -46,13 +47,13 @@
   "dependencies": {
     "@babel/code-frame": "^7.29.0",
     "chokidar": "^4.0.3",
-    "@teoclub/kit": "^1.8.2",
+    "@teoclub/kit": "^1.8.3",
     "picomatch": "^4.0.3",
-    "@teoclub/schemastery": "^3.18.1"
+    "@teoclub/schemastery": "^3.18.2"
   },
   "peerDependencies": {
-    "@teoclub/cordis-plugin-timer": "^1.1.3",
-    "@teoclub/cordis": "^5.0.0"
+    "@teoclub/cordis-plugin-timer": "^1.1.4",
+    "@teoclub/cordis": "^6.0.0"
   },
   "devDependencies": {
     "@types/babel__code-frame": "^7.27.0",

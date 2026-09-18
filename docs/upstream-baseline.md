@@ -14,6 +14,27 @@
 | Upstream version | `0.1.1-rc.2` |
 | License | MIT (Copyright © DeepSeek) |
 
+### Vendored Cordis is pinned separately
+
+This baseline covers the **harness mirror** (`packages/harness/*`,
+`tests/upstream/*`) only. The vendored Cordis distribution under `vendor/cordis/`
+is an independent monorepo with its own pin, recorded in each vendored
+`package.json`'s `teoclub.source.commit` and in
+[vendor/cordis/docs/upstream.md](../vendor/cordis/docs/upstream.md):
+
+| Surface | Revision |
+| --- | --- |
+| Harness mirror (this document) | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh-v0.1.1-rc.2`) |
+| `vendor/cordis` | `ddefc45fbc7f8e46dd73185e68295696d1297887` (`dsh-v0.1.6-alpha.2`) |
+
+The two are bridged by TEO patch 11: the framework sync adopted upstream's
+transactional-reload revert, while the harness packages keep their original
+pin, so `packages/harness/app-boot` owns exact-path config watching itself
+(`src/watch-config.ts`) instead of calling the deleted `Hmr.registerConfig()`.
+`bun run verify:baseline` checks only the harness rows above; the vendored pin
+is gated by `vendor/cordis/scripts/verify-packages.ts` and
+`verify-teo-patches.ts`.
+
 ## Upgrade policy
 
 Rigo Core is pinned to an official DeepSeek Harness **release tag**, never to

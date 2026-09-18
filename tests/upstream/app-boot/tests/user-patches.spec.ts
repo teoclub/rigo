@@ -1,14 +1,14 @@
 /**
  * User patch-layer behavior of `dsh-app-boot`: the optional patch-list loader
  * (a profile's `cordis.patch.yml`) and `boot()` applying the user layer over
- * a real Loader tree, kept live through transactional HMR.
+ * a real Loader tree, kept live through the app-owned config watcher.
  */
 
 import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@teoclub/cordis'
 import Hmr from '@teoclub/cordis-plugin-hmr'
 import Include, { type PatchOptions } from '@teoclub/cordis-plugin-include'
@@ -34,6 +34,21 @@ async function eventually(test: () => boolean, message: string): Promise<void> {
 }
 
 const settleChokidarChangeThrottle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 75))
+
+/** `FiberState` is a const enum with no runtime object; freeze the values used here. */
+const FIBER_ACTIVE = 2
+const FIBER_DISPOSED = 4
+
+const isNode = typeof (process.versions as { bun?: string }).bun === 'undefined'
+
+/**
+ * Runtime-diff: this case applies a failing candidate through the watcher,
+ * which makes a plugin throw during a config-driven restart. The reverted
+ * `Fiber.update()` cannot report that to its caller: Node routes it through
+ * `unhandledRejection`, which the test captures, while Bun's test runner
+ * attributes it to the running test and fails it outright.
+ */
+const _it = isNode ? it : it.skip
 
 describe('loadOptionalPatches', () => {
   afterEach(() => {
@@ -185,7 +200,10 @@ describe('Loader config interpolation', () => {
       await provider?.update({ disabled: true })
       await provider?.update({ config: { fail: true } })
       await provider?.update({ disabled: false })
-      await expect(Promise.resolve(ctx.loader.await())).rejects.toThrow('rejected provider')
+      // Reverted `EntryTree.await()` no longer surfaces fiber failures: it
+      // waits for the tree to settle and the failing provider simply never
+      // resolves a value for its consumer.
+      await ctx.loader.await()
       expect(ctx.get('readerResult')).toBeUndefined()
 
       await provider?.update({ disabled: true })
@@ -249,7 +267,7 @@ describe('Loader entry disabled interpolation', () => {
     try {
       const entry = [...ctx.loader.entries()].find(item => item.options.id === 'expr')
       expect(entry?.disabled).toBe(false)
-      expect(entry?.fiber).toBeDefined()
+      expect(entry?.fiber?.state).toBe(FIBER_ACTIVE)
       // The expression form is the file dialect; the typed programmatic API
       // carries booleans. Include reapplication feeds the raw node through
       // the untyped file path — simulated here with the serialized shape.
@@ -257,10 +275,10 @@ describe('Loader entry disabled interpolation', () => {
       const disabledFalse = { __jsExpr: 'process.version.length === 0' } as unknown as boolean
       await entry?.update({ disabled: disabledTrue })
       expect(entry?.disabled).toBe(true)
-      expect(entry?.fiber).toBeUndefined()
+      expect(entry?.fiber?.state).toBe(FIBER_DISPOSED)
       await entry?.update({ disabled: disabledFalse })
       expect(entry?.disabled).toBe(false)
-      expect(entry?.fiber).toBeDefined()
+      expect(entry?.fiber?.state).toBe(FIBER_ACTIVE)
     } finally {
       await ctx.fiber.dispose()
     }
@@ -312,7 +330,7 @@ describe('boot with user patches', () => {
     }
   })
 
-  it('watches add, failure, recovery, and removal through transactional HMR', { timeout: 20_000 }, async () => {
+  _it('watches add, failure, recovery, and removal through the app-owned watcher', { timeout: 20_000 }, async () => {
     const dir = tmp()
     const userDir = tmp()
     const filename = join(userDir, PROFILE_PATCH_FILENAME)
@@ -320,10 +338,17 @@ describe('boot with user patches', () => {
     const ctx = await boot(NAME, writeTree(dir), basePatches)
     await ctx.plugin(Timer)
     await ctx.plugin(Hmr, { root: [], ignored: [], debounce: 0 })
-    const failures: Array<{ filename: string; error: Error }> = []
-    ctx.on('hmr/config-update-failed', (failedFilename, error) => {
-      failures.push({ filename: failedFilename, error })
-    })
+    // The reverted HMR service no longer broadcasts `hmr/config-update-failed`;
+    // the app-owned watcher contains a refresh failure and logs it instead.
+    const warnings: unknown[][] = []
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation((...args: unknown[]) => { warnings.push(args) })
+    const reloadFailures = () => warnings.filter(args => args[0] === 'config reload at %C failed')
+    // The eager apply of a failing candidate escapes as an unhandled
+    // rejection (see `config-reload.spec.ts`); capture it so the pinned
+    // contract is asserted rather than reported as a runner error.
+    const escaped: Error[] = []
+    const capture = (reason: unknown) => { escaped.push(reason as Error) }
+    process.on('unhandledRejection', capture)
     const dispose = await watchUserPatches(ctx, {
       binName: NAME,
       filename,
@@ -332,18 +357,20 @@ describe('boot with user patches', () => {
     try {
       writeFileSync(filename, '- id: noop\n  config:\n    value: live\n')
       await eventually(() => (entryConfig(ctx, 'noop') as { value?: string }).value === 'live', 'user patch addition was not applied')
-
-      writeFileSync(filename, '- id: noop\n  config:\n    fail: true\n')
-      await eventually(() => failures.length === 1, 'failed candidate was not broadcast')
-      expect(failures[0]).toMatchObject({ filename })
-      expect(failures[0]?.error).toBeInstanceOf(Error)
-      expect((entryConfig(ctx, 'noop') as { value?: string }).value).toBe('live')
       await settleChokidarChangeThrottle()
 
+      // A valid but failing candidate is applied eagerly (no rollback); the
+      // failure surfaces through the loader, not as a restore.
+      writeFileSync(filename, '- id: noop\n  config:\n    fail: true\n')
+      await eventually(() => (entryConfig(ctx, 'noop') as { fail?: boolean }).fail === true, 'failed candidate was not applied')
+      await settleChokidarChangeThrottle()
+
+      // A file the watcher cannot parse is contained: logged with the path, and
+      // the tree keeps whatever it last committed.
       writeFileSync(filename, 'invalid: [unclosed\n')
-      await eventually(() => failures.length === 2, 'parse failure was not broadcast')
-      expect(failures[1]?.error).toBeInstanceOf(Error)
-      expect((entryConfig(ctx, 'noop') as { value?: string }).value).toBe('live')
+      await eventually(() => reloadFailures().length === 1, 'parse failure was not contained')
+      expect(reloadFailures()[0]?.[1]).toBe(filename)
+      expect((entryConfig(ctx, 'noop') as { fail?: boolean }).fail).toBe(true)
       await settleChokidarChangeThrottle()
 
       writeFileSync(filename, '- id: noop\n  config:\n    value: recovered\n')
@@ -352,7 +379,8 @@ describe('boot with user patches', () => {
 
       unlinkSync(filename)
       await eventually(() => (entryConfig(ctx, 'noop') as { value?: string }).value === 'generated', 'user patch removal did not restore the app-owned patch')
-      expect(failures).toHaveLength(2)
+      expect(reloadFailures()).toHaveLength(1)
+      expect(escaped.map(error => error.message)).toContain('candidate config failed')
       await settleChokidarChangeThrottle()
 
       // Default compose: the user layer IS the whole patch list, so a
@@ -366,6 +394,7 @@ describe('boot with user patches', () => {
         await disposeDefault()
       }
     } finally {
+      process.off('unhandledRejection', capture)
       await dispose()
       await ctx.fiber.dispose()
     }
@@ -387,17 +416,18 @@ describe('boot with user patches', () => {
   })
 
   it('returns a no-op disposer when the tree is disposed while the watcher opens', async () => {
-    // A surface can dispose the whole tree while registerConfig's effect
-    // registration is still in flight (the HMR effect then fails with
-    // INACTIVE_EFFECT); the app is exiting exactly as asked, so the watcher
-    // must not crash the process. The stub makes the race deterministic — the
-    // live-teardown ordering itself is not stageable.
+    // A surface can dispose the whole tree while the watcher's `ctx.effect`
+    // registration is still in flight, which fails with INACTIVE_EFFECT. The
+    // app is exiting exactly as asked, so the watcher must not crash the
+    // process. The stub supplies only the config the watcher reads; disposing
+    // concurrently is what puts the registration on the far side of teardown.
     const dir = tmp()
     const ctx = await boot(NAME, writeTree(dir))
     try {
-      const teardown = Object.assign(new Error('cannot create effect on inactive context'), { code: 'INACTIVE_EFFECT' })
-      ctx.provide('hmr', { registerConfig: () => Promise.reject(teardown) })
-      const dispose = await watchUserPatches(ctx, { binName: NAME, filename: join(tmp(), PROFILE_PATCH_FILENAME) })
+      ctx.provide('hmr', { config: {} } as never)
+      const pending = watchUserPatches(ctx, { binName: NAME, filename: join(tmp(), PROFILE_PATCH_FILENAME) })
+      await ctx.fiber.dispose()
+      const dispose = await pending
       await expect(Promise.resolve(dispose())).resolves.toBeUndefined()
     } finally {
       await ctx.fiber.dispose()

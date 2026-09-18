@@ -22,6 +22,40 @@ export interface SessionPersistenceSnapshot {
   revision: SessionPersistenceRevision
 }
 
+/** API-layer presentation fields for one session (provider/model/title). */
+export interface ApiSessionFields {
+  /** Provider id the session was created with, when known. */
+  providerId?: string
+  /** Model id the session was created with, when known. */
+  modelId?: string
+  /** Human-facing session title, when known. */
+  title?: string
+}
+
+/** One persisted session as the API session-list endpoint serves it. */
+export interface ApiSessionRow {
+  /** Session id. */
+  id: string
+  /** Durable status, for example `active` or `closed`. */
+  status: string
+  /** Workspace root (header.cwd), when the session recorded one. */
+  cwd?: string
+  /** Provider id recorded by the API layer, when one was stored. */
+  providerId?: string
+  /** Model id recorded by the API layer, when one was stored. */
+  modelId?: string
+  /** Title recorded by the API layer, when one was stored. */
+  title?: string
+  /** Stored event count (0 for a session that has not materialized events). */
+  eventCount: number
+  /** Highest stored seq, when at least one event is stored. */
+  lastSeq?: number
+  /** ISO timestamp of the session's first durable write. */
+  createdAt: string
+  /** ISO timestamp of the latest durable write or API-field update. */
+  updatedAt: string
+}
+
 /** Immutable logical session prepared from persistence or a live owner. */
 export interface SessionInspection {
   /** Validated immutable session metadata. */
@@ -238,6 +272,32 @@ export abstract class SessionPersistence extends Service {
    * @returns one header and opaque revision per materialized session without loading full logs.
    */
   abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>
+
+  /**
+   * Upsert API-layer presentation fields (provider/model/title) for one
+   * session. The event-sourced log and the durable header stay untouched:
+   * these fields exist only so the API session list can outlive the process.
+   * Omitted members leave the stored values unchanged. Backends without an
+   * API-side store resolve as a no-op.
+   * @param _id - the session whose presentation fields to upsert.
+   * @param fields - the fields to record.
+   */
+  setApiFields(_id: SessionId, fields: ApiSessionFields): Promise<void> {
+    void fields
+    return Promise.resolve()
+  }
+
+  /**
+   * List persisted sessions the way the API session-list endpoint serves
+   * them: durable status and API-side fields plus cheap event counters,
+   * most recently updated first. Backends without an API-side store report
+   * none (callers overlay their live sessions on top).
+   * @param _signal - optional cancellation for backend listing work.
+   * @returns one row per materialized session, newest activity first.
+   */
+  listApiSessions(_signal?: AbortSignal): Promise<ApiSessionRow[]> {
+    return Promise.resolve([])
+  }
 }
 
 export default SessionPersistence

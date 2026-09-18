@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/cordis",
   "description": "Meta-Framework for Modern JavaScript Applications",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -23,14 +23,14 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/cordis",
       "upstreamPackage": "@deepseek-ai/cordis",
-      "upstreamVersion": "4.0.1",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+      "upstreamVersion": "4.0.2",
+      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
     }
   },
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
       "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
       "import": "./lib/index.js"
     },
     "./src/*": "./src/*",
@@ -51,11 +51,11 @@
   "sideEffects": false,
   "dependencies": {
     "@standard-schema/spec": "^1.1.0",
-    "@teoclub/kit": "^1.8.2"
+    "@teoclub/kit": "^1.8.3"
   },
   "peerDependencies": {
-    "@teoclub/cordis-plugin-include": "^1.0.6",
-    "@teoclub/cordis-plugin-loader": "^1.0.2"
+    "@teoclub/cordis-plugin-include": "^1.0.7",
+    "@teoclub/cordis-plugin-loader": "^1.0.3"
   },
   "peerDependenciesMeta": {
     "@teoclub/cordis-plugin-include": {

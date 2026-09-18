@@ -94,12 +94,13 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/boot/app-boot/tests/app-boot.spec.ts` | `app-boot.spec.ts` | `tests/upstream/app-boot/tests/app-boot.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/app-boot.spec.ts` | `app-boot.spec.ts` | `tests/upstream/app-boot/tests/app-boot.spec.ts` | `adapted` | reverted Loader: fail-loud diagnostics now come from assertEntriesActivated, which labels each row with its entry id and specifier |
 | `packages/boot/app-boot/tests/config-dump.spec.ts` | `config-dump.spec.ts` | `tests/upstream/app-boot/tests/config-dump.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/config-reload.spec.ts` | `config-reload.spec.ts` | `tests/upstream/app-boot/tests/config-reload.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/hmr-config.spec.ts` | `hmr-config.spec.ts` | `tests/upstream/app-boot/tests/hmr-config.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/config-reload.spec.ts` | `config-reload.spec.ts` | `tests/upstream/app-boot/tests/config-reload.spec.ts` | `adapted` | reverted Loader (upstream PR #932): pins eager non-transactional containment instead of rollback; Node-only cases documented as a runtime diff |
 | `packages/boot/app-boot/tests/profile.spec.ts` | `profile.spec.ts` | `tests/upstream/app-boot/tests/profile.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/user-patches.spec.ts` | `user-patches.spec.ts` | `tests/upstream/app-boot/tests/user-patches.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/user-patches.spec.ts` | `user-patches.spec.ts` | `tests/upstream/app-boot/tests/user-patches.spec.ts` | `adapted` | reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr/config-update-failed |
+| `packages/boot/app-boot/tests/watch-config.spec.ts` | `watch-config.spec.ts` | `tests/upstream/app-boot/tests/watch-config.spec.ts` | `adapted` | local addition: ported from the newer upstream pin, where the transactional HMR revert moved exact config watching into app boot |
+| `packages/boot/app-boot/tests/hmr-config.spec.ts` | `hmr-config.spec.ts` | — | `intentionally omitted` | covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/watch-config.spec.ts supersedes it |
 
 ### @teoclub/harness-attachment
 

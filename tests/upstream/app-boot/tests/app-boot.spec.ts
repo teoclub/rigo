@@ -721,8 +721,10 @@ describe('boot', () => {
   it('rejects (never exits 0 half-empty) when a config names a plugin that cannot be imported', async () => {
     const dir = tmp()
     writeFileSync(join(dir, 'cordis.yml'), '- id: ghost\n  name: ./missing.mjs\n')
+    // The reverted Loader no longer wraps failures in `failed to apply loader
+    // entry <id>`; the audit below names the unresolvable specifier instead.
     await expect(Promise.resolve(boot(NAME, join(dir, 'cordis.yml')))).rejects.toThrow(
-      `${NAME}: plugin tree failed to load: failed to apply loader entry`,
+      `${NAME}: plugin tree failed to load: ${NAME}: plugin(s) failed to load: ./missing.mjs`,
     )
   })
 
@@ -740,7 +742,7 @@ describe('boot', () => {
     writeFileSync(configPath, config)
 
     await expect(Promise.resolve(boot(NAME, configPath))).rejects.toThrow(
-      'failed to apply loader entry invalid-config (./noop.mjs)',
+      '1 entry did not activate\ninvalid-config (./noop.mjs)',
     )
     expect(readFileSync(configPath, 'utf8')).toBe(config)
   })
@@ -757,8 +759,8 @@ describe('boot', () => {
     ].join('\n'))
     writeFileSync(join(dir, 'cordis.yml'), '- id: failing\n  name: ./failing.mjs\n')
     await expect(Promise.resolve(boot(NAME, join(dir, 'cordis.yml')))).rejects.toThrow(new RegExp([
-      String.raw`failed to apply loader entry failing \(\./failing\.mjs\): pinned activation failure\n`,
-      String.raw`Error: pinned activation failure\n {4}at failing-fixture$`,
+      String.raw`failing \(\./failing\.mjs\): Error: pinned activation failure\n`,
+      String.raw` {4}at failing-fixture$`,
     ].join('')))
   })
 
@@ -779,7 +781,7 @@ describe('boot', () => {
     writeFileSync(join(dir, 'cordis.yml'), '- id: waiting\n  name: ./waiting.mjs\n')
     await expect(Promise.resolve(boot(NAME, join(dir, 'cordis.yml')))).rejects.toThrow([
       `${NAME}: 1 entry did not activate`,
-      './waiting.mjs: pending (waiting for service: neverProvided)',
+      'waiting (./waiting.mjs): pending (waiting for service: neverProvided)',
     ].join('\n'))
   })
 })

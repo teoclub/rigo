@@ -4,6 +4,7 @@
   "include": ["src"],
   "references": [
     { "path": "../sdk" },
+    { "path": "../wire" },
     { "path": "../../../vendor/cordis/packages/cordis" }
   ]
 }

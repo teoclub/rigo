@@ -747,29 +747,25 @@ export class Fiber {
    *
    * @param config — the new raw config; validated before anything restarts.
    * @param noSave — hint for persistence hooks not to write the change back.
-   * @returns a promise settling after the update waterfall or any lifecycle
-   * work already scheduled by this call. On a dependency-blocked PENDING
-   * fiber, the raw config is queued and the promise resolves without waiting
-   * for dependencies that may become available in the future.
-   * @throws when validation, an update listener, or the restarted plugin fails.
+   * @returns nothing; the restart runs behind the `internal/update` waterfall.
+   * @throws {ValidationError} when the new config fails validation.
    */
-  update(config: any, noSave = false): Promise<void> {
+  update(config: any, noSave = false) {
     this.assertActive()
     this._config = config
     if (this.state !== FiberState.ACTIVE) {
       // Config resolution may access injected services, so defer it until the
-      // fiber can activate. Join lifecycle work already scheduled by this
-      // update; a dependency-blocked PENDING fiber has no work to await yet.
+      // fiber can activate.
       this._error = undefined
       this._setEpoch(INACTIVE)
       this._refresh()
-      return this.await().then(() => {})
+      return
     }
     config = this._resolveConfig(config)
-    return Promise.resolve(this.context.waterfall(this, 'internal/update', config, noSave, () => {
+    this.context.waterfall(this, 'internal/update', config, noSave, () => {
       this.config = config
       this._error = undefined
       return this.restart()
-    }))
+    })
   }
 }

@@ -40,6 +40,7 @@ const EXEMPT_LINE_PATTERNS = [
   /"upstreamPackage":\s*"@deepseek-ai\//,
   /"path":\s*"vendor\/cosmokit"/,
   /@cordisjs\/unyaml/,
+  /`@cordisjs\/utils`/,
   /This package continues \[cosmokit\]/,
 ]
 

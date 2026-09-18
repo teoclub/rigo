@@ -30,7 +30,7 @@
 | D2 | 构建 | Bun workspaces + **tsdown** | PRD §23 默认决策"优先保留兼容"；tsdown 是已验证基线（SPEC.md §2），产物路径 `lib/`、ESM/ES2024 不变；Bun Build 留待 P1 再评估 |
 | D3 | 包管理 | Bun（`bun install`，`bun.lock` + `bunfig.toml`） | PRD §16.1 Bun-first 工具链；不影响包在 Node 中运行 |
 | D4 | 测试 | Vitest 4，同一套 Conformance Suite 在 Node 与 Bun 各执行一次 | PRD G5 要求"同一套测试在两个运行时执行"；与上游基线一致；`bun test` 会使套件分裂 |
-| D5 | 首发版本 | `@teoclub/cordis@5.0.0`，其余八包按各自 API 变化独立 SemVer | PRD §16.4；scope 变化 + `engines`/`exports` 变化构成 major |
+| D5 | 发行版本 | `@teoclub/cordis@6.0.0`（原为 5.0.0，`dsh-v0.1.6-alpha.2` 再同步时因移除 `Hmr.registerConfig`/`Fiber.update()` 返回值而升 major），其余八包按各自 API 变化独立 SemVer | PRD §16.4；scope 变化 + `engines`/`exports` 变化构成 major |
 | D6 | 运行时基线 | Node `^22.19.0 \|\| >=24.0.0`；Bun Stable 与前一 Stable（发布时 CI 钉版） | PRD §9.4；`engines` 必须写入每个包（修复基线"无 engines"缺口） |
 | D7 | 源码导出 `./src/*` | P0 保留，标记不稳定入口 | PRD §9.6；降低迁移破坏 |
 | D8 | Schemastery CJS | P0 保留 CJS 双格式（`exports` 分 `import`/`require`） | PRD §23.3 默认保留兼容；是否收敛留 P1 |
@@ -295,6 +295,23 @@ cordis          # 无参数：CWD 加载 ./cordis.yml（基线行为，AC-005）
 八条清理保证（PRD §8.4.4）全部转化为确定性测试用例（§9.4 映射表）；实现层面唯一允许的变更是修复 §5.6 缺口，不重写清理算法。
 
 #### 5.1.4 Loader 条目更新与回滚（FR-LOADER-003）
+
+> **已作废（2026-09-18，`dsh-v0.1.6-alpha.2` 再同步）**
+>
+> 上游回滚了 PR #932（transactional Cordis reload），本条要求随之失效，
+> 本节正文仅作为设计历史保留。当前实际语义：
+>
+> - 条目更新是**急切、非事务**的：失败**不**恢复旧 options，也**不**重建旧
+>   Fiber；条目停留在尝试到达的状态。
+> - `Entry.update()` 在 `name` 变化时**不再重新导入**：新 name 会被记录并写回，
+>   运行中的 Fiber 继续使用旧插件，直到该条目被重建。
+> - `Fiber.update()` **不再返回** waterfall 结果，因此配置驱动的重启失败会以
+>   未捕获 rejection 逃逸（Node 走 `unhandledRejection`；Bun 由运行时自行上报，
+>   不调用该钩子 —— 属 Runtime-diff）。
+> - 仍然成立的保证：**无法读取或解析**的配置编辑会被记录日志并保留运行中的树，
+>   失败的配置**不会**被 Include 写回文件。
+>
+> 决策与影响面见 `docs/upstream.md` 的 “Re-sync record”。
 
 ```
 update(entryId, options):

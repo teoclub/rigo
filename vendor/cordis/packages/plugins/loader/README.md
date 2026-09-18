@@ -7,7 +7,7 @@ sync with entry updates.
 ## Usage
 
 ```ts
-import { Context } from '@teoclub/cordis'
+import { Context } from 'cordis'
 import Loader from '@teoclub/cordis-plugin-loader'
 
 const root = new Context()

@@ -83,6 +83,14 @@ describe('work web api client (Issue 033)', () => {
     expect(await client.getSession('session_ghost')).toBeUndefined()
   })
 
+  it('lists live sessions and maps resume 404 to undefined', async () => {
+    const { client, sessionId } = await liveServer()
+    const listed = await client.listSessions()
+    expect(listed.some((row) => row.sessionId === sessionId)).toBe(true)
+    expect(await client.resumeSession('session_ghost')).toBeUndefined()
+    await expect(client.resumeSession(sessionId)).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' })
+  })
+
   it('sends messages with a unique clientMessageId and replays duplicates', async () => {
     const { client, sessionId } = await liveServer()
     const first = await client.sendMessage(sessionId, 'hello', 'ui-msg-1')

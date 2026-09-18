@@ -1,12 +1,11 @@
-# @teoclub/schemastery
+# Schemastery
+
+[![Codecov](https://img.shields.io/codecov/c/github/shigma/schemastery?style=flat-square)](https://codecov.io/gh/shigma/schemastery)
+[![downloads](https://img.shields.io/npm/dm/schemastery?style=flat-square)](https://www.npmjs.com/package/schemastery)
+[![npm](https://img.shields.io/npm/v/schemastery?style=flat-square)](https://www.npmjs.com/package/schemastery)
+[![GitHub](https://img.shields.io/github/license/shigma/schemastery?style=flat-square)](https://github.com/shigma/schemastery/blob/master/LICENSE)
 
 Type Driven Schema Validator.
-
-## Install
-
-```sh
-npm install @teoclub/schemastery
-```
 
 ## Features
 
@@ -21,7 +20,7 @@ npm install @teoclub/schemastery
 ### use as validator (JavaScript)
 
 ```js
-const Schema = require('@teoclub/schemastery')
+const Schema = require('schemastery')
 
 const validate = Schema.number().default(10)
 
@@ -33,7 +32,7 @@ validate('')    // TypeError
 ### use as constructor (TypeScript)
 
 ```ts
-import Schema from '@teoclub/schemastery'
+import Schema from 'schemastery'
 
 interface Config {
   foo: Record<string, string>
@@ -388,16 +387,3 @@ const schema2 = new Schema(JSON.parse(JSON.stringify(schema1)))
 
 Schemastery also exposes the Standard Schema `~standard` property, so compatible
 tools can validate values without depending on Schemastery-specific APIs.
-
-## Security / Trust Model
-
-Schema objects are serializable, and hydrating a serialized schema whose
-`callback` is a string evaluates that string with `new Function` **in the
-host process** (a behavior inherited from upstream Schemastery). Only
-deserialize schema JSON from sources you trust. `transform`/`method`
-schemas serialized with `Schema.toJSON()` round-trip their callbacks
-through this path. There is no sandbox and no opt-out flag in this
-release.
-
-This distribution is maintained by TEO Club and is not affiliated with
-cordiverse or the upstream Schemastery authors.

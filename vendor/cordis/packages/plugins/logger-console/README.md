@@ -5,7 +5,7 @@ Console exporter for the built-in Cordis logger service.
 ## Usage
 
 ```ts
-import { Context } from '@teoclub/cordis'
+import { Context } from 'cordis'
 import ConsoleLogger from '@teoclub/cordis-plugin-logger-console'
 
 const root = new Context()

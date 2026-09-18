@@ -42,14 +42,23 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "js-yaml": "^4.2.0"
+    "js-yaml": "^4.2.0",
+    "chokidar": "^4.0.3"
   },
   "peerDependencies": {
+    "@teoclub/harness-launch-environment": "*",
+    "@teoclub/cordis-plugin-include": "*",
+    "@teoclub/cordis-plugin-loader": "*",
+    "@teoclub/cordis-plugin-group": "*",
+    "@teoclub/cordis-plugin-hmr": "*",
+    "@teoclub/harness-system-prompt": "*",
+    "@teoclub/harness-invariants": "*",
+    "@teoclub/harness-home-paths": "*",
+    "@teoclub/cordis": "*",
     "@teoclub/harness-agent": "*",
     "@teoclub/harness-agent-loop": "*",
     "@teoclub/harness-llm": "*",
     "@teoclub/harness-session": "*",
-    "@teoclub/harness-system-prompt": "*",
     "@teoclub/harness-tools": "*"
   },
   "devDependencies": {

@@ -29,15 +29,15 @@ interface Expectation {
 }
 
 const EXPECTATIONS: Expectation[] = [
-  { dir: 'packages/kit', name: '@teoclub/kit', version: '1.8.2', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/schemastery', name: '@teoclub/schemastery', version: '3.18.1', runtime: ['lib/index.mjs', 'lib/index.cjs'], types: ['lib/types/index.d.ts'], dualFormat: true },
-  { dir: 'packages/cordis', name: '@teoclub/cordis', version: '5.0.0', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'], bin: true },
-  { dir: 'packages/plugins/loader', name: '@teoclub/cordis-plugin-loader', version: '1.0.2', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/plugins/include', name: '@teoclub/cordis-plugin-include', version: '1.0.6', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/plugins/group', name: '@teoclub/cordis-plugin-group', version: '1.0.1', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/plugins/timer', name: '@teoclub/cordis-plugin-timer', version: '1.1.3', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/plugins/hmr', name: '@teoclub/cordis-plugin-hmr', version: '1.0.16', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
-  { dir: 'packages/plugins/logger-console', name: '@teoclub/cordis-plugin-logger-console', version: '1.0.1', runtime: ['lib/index.js', 'lib/browser.js'], types: ['lib/types/shared.d.ts'], browserEntry: true },
+  { dir: 'packages/kit', name: '@teoclub/kit', version: '1.8.3', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/schemastery', name: '@teoclub/schemastery', version: '3.18.2', runtime: ['lib/index.mjs', 'lib/index.cjs'], types: ['lib/types/index.d.ts'], dualFormat: true },
+  { dir: 'packages/cordis', name: '@teoclub/cordis', version: '6.0.0', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'], bin: true },
+  { dir: 'packages/plugins/loader', name: '@teoclub/cordis-plugin-loader', version: '1.0.3', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/plugins/include', name: '@teoclub/cordis-plugin-include', version: '1.0.7', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/plugins/group', name: '@teoclub/cordis-plugin-group', version: '1.0.2', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/plugins/timer', name: '@teoclub/cordis-plugin-timer', version: '1.1.4', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/plugins/hmr', name: '@teoclub/cordis-plugin-hmr', version: '1.0.17', runtime: ['lib/index.js'], types: ['lib/types/index.d.ts'] },
+  { dir: 'packages/plugins/logger-console', name: '@teoclub/cordis-plugin-logger-console', version: '1.0.2', runtime: ['lib/index.js', 'lib/browser.js'], types: ['lib/types/shared.d.ts'], browserEntry: true },
 ]
 
 const PINNED_COMMIT = /^[0-9a-f]{40}$/

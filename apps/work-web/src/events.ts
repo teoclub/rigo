@@ -40,6 +40,13 @@ export interface UiActionEvent {
   resultSummary?: string
 }
 
+/** One completed chat turn fragment reconstructed from the session log. */
+export interface UiChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+}
+
 /** The UI state derived from the event stream. */
 export interface StreamViewModel {
   agentStatus: 'idle' | 'running'
@@ -48,6 +55,8 @@ export interface StreamViewModel {
   assistantText: string
   /** Incremental reasoning text. */
   reasoningText: string
+  /** Completed user/assistant turns (the current assistant stays in `assistantText`). */
+  messages: UiChatMessage[]
   /** Knowledge sources of the current answer, in rank order. */
   sources: UiSourceReference[]
   /** Whether the last retrieval found nothing (AC-5 explicit empty state). */
@@ -61,12 +70,20 @@ export interface StreamViewModel {
   turnId: number | undefined
 }
 
+const MAX_ACTIONS = 40
+const MAX_MESSAGES = 120
+
+function capped<T>(items: readonly T[], max: number): T[] {
+  return items.length <= max ? [...items] : items.slice(-max)
+}
+
 export function initialViewModel(): StreamViewModel {
   return {
     agentStatus: 'idle',
     phase: 'idle',
     assistantText: '',
     reasoningText: '',
+    messages: [],
     sources: [],
     retrievalEmpty: false,
     pendingApprovals: 0,
@@ -103,6 +120,47 @@ export function chunkText(payload: Record<string, unknown>): { text?: string; re
   return text === undefined ? {} : { text }
 }
 
+function contentText(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    const trimmed = content.trim()
+    return trimmed.length === 0 ? undefined : trimmed
+  }
+  if (!Array.isArray(content)) return undefined
+  const parts: string[] = []
+  for (const block of content) {
+    if (block === null || typeof block !== 'object') continue
+    const text = (block as { text?: unknown }).text
+    if (typeof text === 'string' && text.length > 0) parts.push(text)
+  }
+  const joined = parts.join('\n').trim()
+  return joined.length === 0 ? undefined : joined
+}
+
+/**
+ * Visible user-prompt text from a `user/message` payload. Injected plugin
+ * context (AGENTS.md, notices, catalogs) stays out of the chat transcript.
+ */
+export function userPromptText(payload: unknown): string | undefined {
+  if (payload === null || typeof payload !== 'object') return undefined
+  const row = payload as { source?: { kind?: unknown }; content?: unknown; text?: unknown; message?: unknown }
+  if (row.source !== undefined && row.source.kind !== 'user') return undefined
+  return contentText(row.content)
+    ?? (typeof row.text === 'string' && row.text.trim().length > 0 ? row.text.trim() : undefined)
+    ?? userPromptText(row.message === payload ? undefined : row.message)
+}
+
+function archiveAssistant(view: StreamViewModel): UiChatMessage[] {
+  if (view.assistantText.trim().length === 0) return view.messages
+  return capped([
+    ...view.messages,
+    {
+      id: `assistant-${view.turnId ?? view.lastSeq}`,
+      role: 'assistant',
+      text: view.assistantText,
+    },
+  ], MAX_MESSAGES)
+}
+
 /** Fold one SSE frame into the view model (deterministic). */
 export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewModel {
   if (frame.event === 'session.snapshot') {
@@ -113,7 +171,17 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
   if (typeof data.seq === 'number') view = { ...view, lastSeq: data.seq }
   switch (data.type) {
     case 'turn/start':
-      return { ...view, agentStatus: 'running', phase: 'context', turnId: Number((data.payload as { turn?: unknown })?.turn) }
+      return {
+        ...view,
+        messages: archiveAssistant(view),
+        assistantText: '',
+        reasoningText: '',
+        sources: [],
+        retrievalEmpty: false,
+        agentStatus: 'running',
+        phase: 'context',
+        turnId: Number((data.payload as { turn?: unknown })?.turn),
+      }
     case 'turn/end': {
       const payload = data.payload as { reason?: { kind?: unknown } } | undefined
       return {
@@ -122,6 +190,13 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
         phase: 'idle',
         ...(payload?.reason?.kind === 'error' ? {} : {}),
       }
+    }
+    case 'user/message': {
+      const text = userPromptText(data.payload)
+      if (text === undefined) return view
+      const id = typeof data.seq === 'number' ? `user-${data.seq}` : `user-${view.messages.length}`
+      if (view.messages.some((message) => message.id === id)) return view
+      return { ...view, messages: capped([...view.messages, { id, role: 'user', text }], MAX_MESSAGES) }
     }
     case 'context/contributed':
       return { ...view, phase: 'context' }
@@ -153,7 +228,7 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
         ...view,
         pendingApprovals: Math.max(0, view.pendingApprovals - 1),
         ...((data.payload as { outcome?: unknown })?.outcome === 'denied'
-          ? { phase: 'action', actions: [...view.actions, { executionId: 'approval', action: 'approval', status: 'denied' }] }
+          ? { phase: 'action', actions: capped([...view.actions, { executionId: 'approval', action: 'approval', status: 'denied' }], MAX_ACTIONS) }
           : {}),
       }
     case 'action/executed': {
@@ -167,7 +242,7 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
       return {
         ...view,
         phase: payload?.status === 'running' || payload?.status === 'requires-approval' ? 'action' : view.phase,
-        actions: [
+        actions: capped([
           ...view.actions,
           {
             executionId: String(payload?.executionId ?? ''),
@@ -176,12 +251,28 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
             ...(typeof payload?.durationMs === 'number' ? { durationMs: payload.durationMs } : {}),
             ...(typeof payload?.resultSummary === 'string' ? { resultSummary: payload.resultSummary } : {}),
           },
-        ],
+        ], MAX_ACTIONS),
       }
     }
     default:
       return view
   }
+}
+
+/** Fold a batch of frames in one pass (replay / rAF coalescing). */
+export function foldEvents(view: StreamViewModel, frames: readonly SseFrame[]): StreamViewModel {
+  return frames.reduce(foldEvent, view)
+}
+
+/** Frames that should refresh the approvals/audit HTTP surfaces. */
+export function isSurfaceRefreshFrame(frame: SseFrame): boolean {
+  if (frame.event === 'session.snapshot') return true
+  if (frame.event !== 'session.event') return false
+  const type = (frame.data as { type?: unknown }).type
+  return type === 'turn/end'
+    || type === 'approval/requested'
+    || type === 'approval/resolved'
+    || type === 'action/executed'
 }
 
 /** Human-readable action state labels (SPEC §3.4; AC-5 — text, never color-only). */

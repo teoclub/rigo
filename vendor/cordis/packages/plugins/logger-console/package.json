@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/cordis-plugin-logger-console",
   "description": "Console logger exporter for cordis",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/shared.d.ts",
@@ -23,12 +23,13 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/logger-console",
       "upstreamPackage": "@deepseek-ai/cordis-plugin-logger-console",
-      "upstreamVersion": "1.0.1",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+      "upstreamVersion": "1.0.2",
+      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
     }
   },
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "types": "./lib/types/shared.d.ts",
       "node": "./lib/index.js",
       "default": "./lib/browser.js"
@@ -46,11 +47,11 @@
     "README.md"
   ],
   "dependencies": {
-    "@teoclub/kit": "^1.8.2",
-    "@teoclub/schemastery": "^3.18.1",
+    "@teoclub/kit": "^1.8.3",
+    "@teoclub/schemastery": "^3.18.2",
     "supports-color": "^9.4.0"
   },
   "peerDependencies": {
-    "@teoclub/cordis": "^5.0.0"
+    "@teoclub/cordis": "^6.0.0"
   }
 }

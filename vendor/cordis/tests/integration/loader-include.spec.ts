@@ -6,13 +6,15 @@ import { pathToFileURL } from 'node:url'
 import { Context } from '@teoclub/cordis'
 import Loader from '@teoclub/cordis-plugin-loader'
 import Include from '@teoclub/cordis-plugin-include'
+import { S } from '../conformance/utils.ts'
 
 /**
  * Nine-package integration flow (SPEC §9.2): cold start from cordis.yml ->
- * plugin tree loading -> runtime entry CRUD -> failed-update rollback ->
+ * plugin tree loading -> runtime entry CRUD -> failed-update containment ->
  * atomic write-back -> full disposal cleanup.
  */
 
+const isNode = typeof (process.versions as any).bun === 'undefined'
 let root: string
 let ctx: Context
 const applied: Record<string, any[]> = {}
@@ -99,28 +101,37 @@ describe('integration: loader + include', () => {
     expect(content).not.toContain('marker: created')
   })
 
-  it('failed update rolls back to the previous plugin state', async () => {
+  // Runtime-diff (Node only): the assertion below triggers a plugin that
+  // throws during a config-driven restart, which the reverted `Fiber.update()`
+  // can no longer report to its caller. Node routes that through
+  // `unhandledRejection`, which the test captures; Bun attributes it to the
+  // running test and fails it outright, and offers no hook to consume it.
+  const _it = isNode ? it : it.skip
+  _it('failed update reports the failure without rolling the entry back', async () => {
     await boot()
-    const seenBefore = (globalThis as any).__integrationSeen.length
-    const id = ctx.loader.store['p1'] ? 'p1' : Object.keys(ctx.loader.store)[0]
+    const include = ctx.loader.resolve(Object.keys(ctx.loader.store)[0]).subtree as any
+    const entry = include.store['p1']
+    expect(entry.options.config).toEqual({ marker: 'first' })
 
-    // the plugin throws on marker === 'bad'
-    await expect(ctx.loader.update(id, {
-      name: './plugin.mjs',
-      config: { marker: 'bad' },
-    })).rejects.toThrow(/refusing bad config/)
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The plugin throws on marker === 'bad'. The reverted, non-transactional
+    // update path assigns the new config and restarts eagerly, so the previous
+    // plugin is NOT restored and `update()` resolves normally (reverted PR
+    // #932). Because `Fiber.update()` no longer returns the restart promise,
+    // the failure surfaces as an unhandled rejection rather than to the
+    // caller - captured here so the contract is pinned rather than incidental.
+    const rejections: Error[] = []
+    const capture = (reason: unknown) => { rejections.push(reason as Error) }
+    process.on('unhandledRejection', capture)
+    try {
+      await include.update('p1', { config: { marker: 'bad' } })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    } finally {
+      process.off('unhandledRejection', capture)
+    }
 
-    // the previous fiber/config is restored: the plugin still runs 'first'
-    const seen = (globalThis as any).__integrationSeen
-    expect(seen[seen.length - 1]).toEqual({ marker: 'first' })
-    expect(seen.length).toBeGreaterThan(seenBefore)
-
-    // write-back still contains the working config, not the failed one
-    const content = await readFile(join(root, 'cordis.yml'), 'utf8')
-    expect(content).toContain('marker: first')
-    expect(content).not.toContain("marker: 'bad'")
-    expect(content).not.toContain('marker: bad')
+    expect(entry.options.config).toEqual({ marker: 'bad' })
+    expect(entry.fiber?.state).toBe(S.FAILED)
+    expect(rejections.map((error) => error.message)).toContain('refusing bad config')
   })
 
   it('dispose: root disposal unloads every entry cleanly', async () => {

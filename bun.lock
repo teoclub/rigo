@@ -69,6 +69,7 @@
         "@types/react": "^19.2.18",
         "@types/react-dom": "^19.2.5",
         "@vitejs/plugin-react": "^6.1.0",
+        "chokidar": "^4.0.3",
         "fast-check": "^3.23.0",
         "js-yaml": "^4.1.0",
         "jsdom": "^30.0.1",
@@ -84,10 +85,22 @@
         "zod": "^4.4.3",
       },
     },
+    "apps/cli": {
+      "name": "@teoclub/rigo-cli",
+      "version": "0.1.0",
+      "bin": {
+        "rigo": "bin.js",
+      },
+      "dependencies": {
+        "@teoclub/harness-llm-openai-compatible": "*",
+        "@teoclub/work-base": "*",
+      },
+    },
     "apps/work-web": {
       "name": "@teoclub/work-web",
       "version": "0.1.0",
       "dependencies": {
+        "@teoclub/api-wire": "*",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
       },
@@ -101,6 +114,7 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/api-sdk": "*",
+        "@teoclub/api-wire": "*",
       },
     },
     "packages/api/sdk": {
@@ -113,6 +127,10 @@
         "@teoclub/shared-approvals": "*",
         "@teoclub/shared-audit": "*",
       },
+    },
+    "packages/api/wire": {
+      "name": "@teoclub/api-wire",
+      "version": "0.1.0",
     },
     "packages/bundle/code-minimal": {
       "name": "@teoclub/code-minimal",
@@ -248,14 +266,23 @@
       "name": "@teoclub/harness-app-boot",
       "version": "0.1.0",
       "dependencies": {
+        "chokidar": "^4.0.3",
         "js-yaml": "^4.2.0",
       },
       "devDependencies": {
         "@types/js-yaml": "^4.0.9",
       },
       "peerDependencies": {
+        "@teoclub/cordis": "*",
+        "@teoclub/cordis-plugin-group": "*",
+        "@teoclub/cordis-plugin-hmr": "*",
+        "@teoclub/cordis-plugin-include": "*",
+        "@teoclub/cordis-plugin-loader": "*",
         "@teoclub/harness-agent": "*",
         "@teoclub/harness-agent-loop": "*",
+        "@teoclub/harness-home-paths": "*",
+        "@teoclub/harness-invariants": "*",
+        "@teoclub/harness-launch-environment": "*",
         "@teoclub/harness-llm": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-system-prompt": "*",
@@ -300,7 +327,7 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "workspace:*",
+        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/invariants": {
@@ -318,7 +345,7 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "workspace:*",
+        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/llm": {
@@ -618,17 +645,17 @@
     },
     "vendor/cordis/packages/cordis": {
       "name": "@teoclub/cordis",
-      "version": "5.0.0",
+      "version": "6.0.0",
       "bin": {
         "cordis": "bin.js",
       },
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
-        "@teoclub/kit": "^1.8.2",
+        "@teoclub/kit": "^1.8.3",
       },
       "peerDependencies": {
-        "@teoclub/cordis-plugin-include": "^1.0.6",
-        "@teoclub/cordis-plugin-loader": "^1.0.2",
+        "@teoclub/cordis-plugin-include": "^1.0.7",
+        "@teoclub/cordis-plugin-loader": "^1.0.3",
       },
       "optionalPeers": [
         "@teoclub/cordis-plugin-include",
@@ -637,23 +664,23 @@
     },
     "vendor/cordis/packages/kit": {
       "name": "@teoclub/kit",
-      "version": "1.8.2",
+      "version": "1.8.3",
     },
     "vendor/cordis/packages/plugins/group": {
       "name": "@teoclub/cordis-plugin-group",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "peerDependencies": {
-        "@teoclub/cordis": "^5.0.0",
-        "@teoclub/cordis-plugin-loader": "^1.0.2",
+        "@teoclub/cordis": "^6.0.0",
+        "@teoclub/cordis-plugin-loader": "^1.0.3",
       },
     },
     "vendor/cordis/packages/plugins/hmr": {
       "name": "@teoclub/cordis-plugin-hmr",
-      "version": "1.0.16",
+      "version": "1.0.17",
       "dependencies": {
         "@babel/code-frame": "^7.29.0",
-        "@teoclub/kit": "^1.8.2",
-        "@teoclub/schemastery": "^3.18.1",
+        "@teoclub/kit": "^1.8.3",
+        "@teoclub/schemastery": "^3.18.2",
         "chokidar": "^4.0.3",
         "picomatch": "^4.0.3",
       },
@@ -663,31 +690,31 @@
         "esbuild": "^0.28.1",
       },
       "peerDependencies": {
-        "@teoclub/cordis": "^5.0.0",
-        "@teoclub/cordis-plugin-timer": "^1.1.3",
+        "@teoclub/cordis": "^6.0.0",
+        "@teoclub/cordis-plugin-timer": "^1.1.4",
       },
     },
     "vendor/cordis/packages/plugins/include": {
       "name": "@teoclub/cordis-plugin-include",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "dependencies": {
-        "@teoclub/kit": "^1.8.2",
+        "@teoclub/kit": "^1.8.3",
         "js-yaml": "^4.1.0",
       },
       "peerDependencies": {
-        "@teoclub/cordis": "^5.0.0",
-        "@teoclub/cordis-plugin-loader": "^1.0.2",
+        "@teoclub/cordis": "^6.0.0",
+        "@teoclub/cordis-plugin-loader": "^1.0.3",
       },
     },
     "vendor/cordis/packages/plugins/loader": {
       "name": "@teoclub/cordis-plugin-loader",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "dependencies": {
-        "@teoclub/kit": "^1.8.2",
+        "@teoclub/kit": "^1.8.3",
       },
       "peerDependencies": {
-        "@teoclub/cordis": "^5.0.0",
-        "node-addon-require-builtin": "^0.1.4",
+        "@teoclub/cordis": "^6.0.0",
+        "node-addon-require-builtin": "^0.1.6",
       },
       "optionalPeers": [
         "node-addon-require-builtin",
@@ -695,7 +722,7 @@
     },
     "vendor/cordis/packages/plugins/logger-console": {
       "name": "@teoclub/cordis-plugin-logger-console",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "dependencies": {
         "@teoclub/kit": "^1.8.2",
         "@teoclub/schemastery": "^3.18.1",
@@ -707,20 +734,20 @@
     },
     "vendor/cordis/packages/plugins/timer": {
       "name": "@teoclub/cordis-plugin-timer",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "dependencies": {
-        "@teoclub/kit": "^1.8.2",
+        "@teoclub/kit": "^1.8.3",
       },
       "peerDependencies": {
-        "@teoclub/cordis": "^5.0.0",
+        "@teoclub/cordis": "^6.0.0",
       },
     },
     "vendor/cordis/packages/schemastery": {
       "name": "@teoclub/schemastery",
-      "version": "3.18.1",
+      "version": "3.18.2",
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
-        "@teoclub/kit": "^1.8.2",
+        "@teoclub/kit": "^1.8.3",
       },
     },
   },
@@ -887,6 +914,8 @@
 
     "@teoclub/api-sdk": ["@teoclub/api-sdk@workspace:packages/api/sdk"],
 
+    "@teoclub/api-wire": ["@teoclub/api-wire@workspace:packages/api/wire"],
+
     "@teoclub/code-context-repository": ["@teoclub/code-context-repository@workspace:packages/code/context-repository"],
 
     "@teoclub/code-file-actions": ["@teoclub/code-file-actions@workspace:packages/code/file-actions"],
@@ -968,6 +997,8 @@
     "@teoclub/harness-user-approval": ["@teoclub/harness-user-approval@workspace:packages/harness/user-approval"],
 
     "@teoclub/kit": ["@teoclub/kit@workspace:vendor/cordis/packages/kit"],
+
+    "@teoclub/rigo-cli": ["@teoclub/rigo-cli@workspace:apps/cli"],
 
     "@teoclub/schemastery": ["@teoclub/schemastery@workspace:vendor/cordis/packages/schemastery"],
 

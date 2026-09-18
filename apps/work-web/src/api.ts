@@ -3,8 +3,46 @@
  * over the Issue 028/029 `/api/v1` endpoints. Framework-free — tested
  * directly against a real api-http server.
  *
+ * The wire shapes themselves live in `@teoclub/api-wire` (Issue 039) and are
+ * re-exported here so every existing `from './api.ts'` import site keeps
+ * working. Only `ApiError` — a client-side `Error` subclass, not a payload —
+ * is defined in this module.
+ *
  * @module @teoclub/work-web/api
  */
+
+import {
+  SseDecoder,
+  sseReconnectDelay,
+  type ApprovalDecisionInput,
+  type ApprovalRecord,
+  type ApprovalResolveResult,
+  type AuditEntry,
+  type ClientPluginsResponse,
+  type CreateSessionInput,
+  type HealthResponse,
+  type SendMessageResult,
+  type SessionDefaults,
+  type SessionDefaultsResponse,
+  type SessionSnapshot,
+  type SseFrame,
+} from '@teoclub/api-wire'
+
+export type {
+  ApprovalDecisionInput,
+  ClientPluginsResponse,
+  ApprovalRecord,
+  ApprovalResolveResult,
+  AuditEntry,
+  CreateSessionInput,
+  HealthResponse,
+  SendMessageResult,
+  SessionDefaults,
+  SessionSnapshot,
+  SseFrame,
+}
+
+export { sseReconnectDelay }
 
 /** Unified API error (SPEC §4.7 envelope). */
 export class ApiError extends Error {
@@ -21,81 +59,6 @@ export class ApiError extends Error {
     this.details = options.details ?? null
     this.requestId = options.requestId ?? ''
   }
-}
-
-export interface SessionSnapshot {
-  sessionId: string
-  status: 'active' | 'closed'
-  agentStatus: 'idle' | 'running' | 'unavailable'
-  cwd?: string
-  providerId?: string
-  modelId?: string
-  title?: string
-  eventCount: number
-  lastSeq: number
-}
-
-export interface CreateSessionInput {
-  providerId: string
-  modelId: string
-  workspaceRoot: string
-  title?: string
-}
-
-export interface SendMessageResult {
-  turnId: string
-  status: 'accepted' | 'replayed'
-}
-
-export interface SseFrame {
-  id: number
-  event: string
-  data: Record<string, unknown>
-}
-
-export interface HealthResponse {
-  status: string
-  runtime: string
-  database: string
-}
-
-/** One pending approval (SPEC §4.6; Issue 034). */
-export interface ApprovalRecord {
-  id: string
-  sessionId: string
-  actionExecutionId: string
-  actionName: string
-  target: string
-  paramsSummary: string
-  expectedImpact: string
-  state: string
-  version: number
-  createdAt: string
-  expiresAt: string
-  decidedAt?: string
-  decision?: string
-}
-
-/** One audit entry (SPEC §3.7; Issue 034). */
-export interface AuditEntry {
-  sessionId: string
-  seq: number
-  time: number
-  category: string
-  correlationId: string
-  summary: string
-  data: Record<string, unknown>
-}
-
-export interface ApprovalDecisionInput {
-  decision: 'approved' | 'denied' | 'cancelled'
-  expectedVersion?: number
-  comment?: string
-}
-
-export interface ApprovalResolveResult {
-  approval: ApprovalRecord
-  execution?: { status: string; executionId: string; action: string; error?: { message: string; code?: string } }
 }
 
 export class WorkApiClient {
@@ -137,6 +100,24 @@ export class WorkApiClient {
     return ((await response.json()) as { session: SessionSnapshot }).session
   }
 
+  /** List sessions (durable rows overlaid with live ones, newest first). */
+  async listSessions(): Promise<SessionSnapshot[]> {
+    const response = await fetch(`${this.base}/api/v1/sessions`)
+    if (!response.ok) throw await this.envelopeError(response)
+    const listed = ((await response.json()) as { sessions?: SessionSnapshot[] }).sessions
+    return Array.isArray(listed) ? listed : []
+  }
+
+  /** Resume a persisted session into the live store (undefined when unknown). */
+  async resumeSession(sessionId: string): Promise<SessionSnapshot | undefined> {
+    const response = await this.stateFetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, {
+      method: 'POST',
+    })
+    if (response.status === 404) return undefined
+    if (!response.ok) throw await this.envelopeError(response)
+    return ((await response.json()) as { session: SessionSnapshot }).session
+  }
+
   /** Send one user message with a unique clientMessageId (AC-2). */
   async sendMessage(sessionId: string, content: string, clientMessageId: string): Promise<SendMessageResult> {
     const response = await this.stateFetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/messages`, {
@@ -162,6 +143,36 @@ export class WorkApiClient {
     })
     if (!response.ok) throw await this.envelopeError(response)
     return (await response.json()) as ApprovalResolveResult
+  }
+
+  /** The host's session defaults — the settings surface reads these. */
+  async sessionDefaults(): Promise<SessionDefaults> {
+    const response = await fetch(`${this.base}/api/v1/settings/session-defaults`)
+    if (!response.ok) throw await this.envelopeError(response)
+    return ((await response.json()) as SessionDefaultsResponse).values
+  }
+
+  /** Merge a patch into the host's session defaults. */
+  async saveSessionDefaults(patch: Partial<SessionDefaults>): Promise<SessionDefaults> {
+    const response = await this.stateFetch('/api/v1/settings/session-defaults', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    })
+    if (!response.ok) throw await this.envelopeError(response)
+    return ((await response.json()) as SessionDefaultsResponse).values
+  }
+
+  /**
+   * The host's browser-plugin composition.
+   *
+   * The host decides which client features the page runs; the browser only
+   * resolves the ids it is given. A failure here is NOT a licence to compose
+   * everything — see `main.tsx`.
+   */
+  async clientPlugins(): Promise<ClientPluginsResponse> {
+    const response = await fetch(`${this.base}/api/v1/client/plugins`)
+    if (!response.ok) throw await this.envelopeError(response)
+    return (await response.json()) as ClientPluginsResponse
   }
 
   /** The ordered audit projection of one session (AC-7). */
@@ -214,21 +225,12 @@ export class WorkApiClient {
         handlers.onStatus?.('connected', attempt)
         const reader = response.body!.getReader()
         const decoder = new TextDecoder()
-        let buffer = ''
+        const frames = new SseDecoder()
         try {
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            let boundary: number
-            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-              const raw = buffer.slice(0, boundary)
-              buffer = buffer.slice(boundary + 2)
-              const id = Number.parseInt(raw.match(/^id: (.+)$/m)?.[1] ?? '-1', 10)
-              const event = raw.match(/^event: (.+)$/m)?.[1] ?? ''
-              const dataLine = raw.match(/^data: (.+)$/m)?.[1]
-              if (event.length === 0 || dataLine === undefined) continue
-              const frame: SseFrame = { id, event, data: JSON.parse(dataLine) as Record<string, unknown> }
+            for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
               if (frame.id >= 0) lastEventId = frame.id
               handlers.onEvent(frame)
             }
@@ -283,13 +285,6 @@ export class WorkApiClient {
       },
     )
   }
-}
-
-/** The capped SSE reconnect backoff (SPEC §6.2: 1s/2s/5s/10s). */
-export function sseReconnectDelay(attempt: number): number {
-  const sequence = [1000, 2000, 5000, 10000]
-  const index = Math.min(Math.max(attempt, 1) - 1, sequence.length - 1)
-  return sequence[index]!
 }
 
 function delay(ms: number): Promise<void> {

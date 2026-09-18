@@ -18,6 +18,7 @@ import Group from '@teoclub/cordis-plugin-group'
 import { dshHomePath, resolveDshHome } from '@teoclub/harness-home-paths'
 import { createLaunchEnvironmentSnapshot, type LaunchEnvironmentSnapshot } from '@teoclub/harness-launch-environment'
 import type {} from '@teoclub/cordis-plugin-hmr'
+import { watchConfig } from './watch-config.ts'
 // Side-effect type import: resolves `ctx.get('systemPrompt')` to the service.
 import type {} from '@teoclub/harness-system-prompt'
 
@@ -239,7 +240,13 @@ export interface UserPatchWatchOptions {
 }
 
 /**
- * Watch the user patch layer through Cordis HMR and transactionally reapply it to the boot include.
+ * Watch the user patch layer and reapply it to the boot include.
+ *
+ * The exact-path watcher lives here rather than in the HMR service: the
+ * transactional HMR revert (upstream PR #932) deleted `Hmr.registerConfig()`
+ * and moved that responsibility into app boot, which is what owns the profile
+ * patch layer.
+ *
  * @param ctx - settled app context containing the root Include and an active HMR service.
  * @param options - diagnostic, file, and patch-composition inputs.
  * @returns an asynchronous disposer after the exact-path watcher is ready.
@@ -254,7 +261,7 @@ export async function watchUserPatches(
   if (hmr === undefined) throw new Error(`${binName}: user patch-layer watching requires the Cordis HMR service`)
   const entry = bootstrapIncludes.get(ctx)
   if (entry === undefined) throw new Error(`${binName}: user patch-layer watching requires the root Include entry`)
-  const register = hmr.registerConfig(filename, async () => {
+  const register = watchConfig(ctx, filename, hmr.config, async () => {
     // Re-read the include's non-patch options per refresh: a writer that
     // updates the root Include's other options between refreshes (none exists
     // today) must not have them silently reverted by a user-layer reload.
@@ -497,7 +504,7 @@ function groupedDump(
  * names; relative names continue to resolve beside the configuration file.
  * @returns the created root Include entry, or `undefined` when a surface
  * disposed the whole tree (taking the Loader service with it) while the
- * transactional create was still settling entry lifecycle.
+ * create was still settling entry lifecycle.
  */
 export async function mountRootInclude(
   ctx: Context,
@@ -699,6 +706,10 @@ function formatActivationError(error: unknown): string {
  * unresolved services because no plugin error exists for that state. Active
  * entries require no further wait; only failed fibers are awaited to recover
  * their private rejection reason.
+ *
+ * Every row is labelled with its loader entry id and module specifier: the
+ * reverted Loader no longer wraps failures in a per-row error of its own, so
+ * this audit is the only place a reader learns which config row to fix.
  * @param ctx - the settled context whose Loader entries to audit.
  * @param binName - the diagnostic prefix on the thrown error.
  * @returns nothing when every enabled entry is active.
@@ -712,6 +723,10 @@ export async function assertEntriesActivated(ctx: Context, binName: string): Pro
   for (const entry of ctx.loader.entries()) {
     const fiber = entry.fiber
     if (fiber === undefined || entry.disabled) continue
+    // Entries created programmatically may never have been given an id, so the
+    // label degrades to the specifier alone rather than reading `undefined`.
+    const { id, name } = entry.options
+    const row = id ? `${id} (${name})` : name
     const state = fiber.state
     if (state === FIBER_ACTIVE) continue
     if (state === FIBER_FAILED) {
@@ -719,16 +734,16 @@ export async function assertEntriesActivated(ctx: Context, binName: string): Pro
         await fiber.await()
       } catch (error) {
         rejectionReasons.push(error)
-        failures.push(`${entry.options.name}: ${formatActivationError(error)}`)
+        failures.push(`${row}: ${formatActivationError(error)}`)
       }
       continue
     }
     if (state === FIBER_PENDING) {
       const missing = Object.keys(fiber.inject).filter(service => fiber.ctx.get(service) === undefined)
       const subject = missing.length === 1 ? 'service' : 'services'
-      failures.push(`${entry.options.name}: pending (waiting for ${subject}: ${missing.join(', ') || 'unknown'})`)
+      failures.push(`${row}: pending (waiting for ${subject}: ${missing.join(', ') || 'unknown'})`)
     } else {
-      failures.push(`${entry.options.name}: fiber state ${String(state)}`)
+      failures.push(`${row}: fiber state ${String(state)}`)
     }
   }
   if (failures.length > 0) {
@@ -805,10 +820,9 @@ export async function boot(
     // result, so this await cannot reject and replace `cause`.
     await ctx.fiber.dispose()
     const detail = cause instanceof Error ? cause.message : String(cause)
-    // The transactional Loader wraps a failing entry apply in one message per
-    // tree layer; every layer's message is folded into `detail` above, and the
-    // deepest cause is the plugin's own thrown error, whose stack names the
-    // real failure site — append it so the startup diagnostic preserves the
+    // Every layer's message is folded into `detail` above, and the deepest
+    // cause is the plugin's own thrown error, whose stack names the real
+    // failure site — append it so the startup diagnostic preserves the
     // original activation error instead of only the wrap chain.
     let deepest: unknown = cause
     while (deepest instanceof Error && deepest.cause !== undefined) deepest = deepest.cause

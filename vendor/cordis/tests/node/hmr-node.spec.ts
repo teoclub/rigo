@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const run = promisify(execFile)
@@ -87,6 +87,8 @@ _d('hmr node engine (subprocess with --expose-internals)', () => {
     // and the tmp root needs the workspace node_modules for entry imports
     const script = resolve('tmp', 'hmr-node-scenario.mjs')
     try {
+      // `tmp/` is gitignored, so a fresh checkout does not have it
+      await mkdir(dirname(script), { recursive: true })
       await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir')
       await writeFile(script, scenario)
       const { stdout } = await run(process.execPath, ['--expose-internals', script, root], {

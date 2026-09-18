@@ -17,6 +17,8 @@ import {
   SdkError,
   createInProcessSdk,
   toSdkError,
+  type FacadeApiFields,
+  type FacadeSessionRow,
   type SessionEventPayload,
 } from '@teoclub/api-sdk'
 import { SessionStore, SessionId, type AgentCancelCause, type Session } from '@teoclub/harness-session'
@@ -142,6 +144,143 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
     }
   })
 
+  it('lists sessions through the persistence seam, live state over durable rows', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const saved: Array<[string, FacadeApiFields]> = []
+    let rows: FacadeSessionRow[] = []
+    const facade = new RuntimeFacade(ctx, {
+      agentFactory: () => makeFakeAgent(ctx.sessions.create(undefined, {})),
+      persistence: {
+        listSessions: () => rows,
+        saveApiFields: (id, fields) => {
+          saved.push([id, fields])
+        },
+      },
+    })
+    const sdk = createInProcessSdk(facade)
+    try {
+      const created = await sdk.createSession({ providerId: 'mock', modelId: 'mock', title: 'MVP' })
+      // Creation upserts the API fields through the seam.
+      expect(saved).toEqual([[created.sessionId, { providerId: 'mock', modelId: 'mock', title: 'MVP' }]])
+      // Without durable rows the list is live-only.
+      expect((await sdk.listSessions()).map((row) => row.sessionId)).toEqual([created.sessionId])
+
+      // A durable-only row from a previous run lists as not-live.
+      rows = [{ id: 'session_old', status: 'active', cwd: '/tmp/old', title: 'Previous run', eventCount: 4, lastSeq: 3, createdAt: '2026-02-15T00:00:00.000Z', updatedAt: '2026-02-15T00:00:00.000Z' }]
+      let listed = await sdk.listSessions()
+      expect(listed.map((row) => row.sessionId)).toEqual([created.sessionId, 'session_old'])
+      expect(listed[0]).toMatchObject({ title: 'MVP', agentStatus: 'idle', eventCount: 0, lastSeq: -1 })
+      expect(listed[1]).toMatchObject({
+        title: 'Previous run',
+        agentStatus: 'unavailable',
+        status: 'active',
+        cwd: '/tmp/old',
+        eventCount: 4,
+        lastSeq: 3,
+        createdAt: '2026-02-15T00:00:00.000Z',
+        updatedAt: '2026-02-15T00:00:00.000Z',
+      })
+
+      // A durable row for the LIVE session: live counters win, in-memory
+      // metadata wins over the row, and the row backfills the timestamps.
+      rows = [
+        ...rows,
+        { id: created.sessionId, status: 'active', providerId: 'stale', eventCount: 9, createdAt: '2025-12-01T00:00:00.000Z', updatedAt: '2026-02-01T00:00:00.000Z' },
+      ]
+      listed = await sdk.listSessions()
+      // The durable-only row is newer than the live session's watermark.
+      expect(listed.map((row) => row.sessionId)).toEqual(['session_old', created.sessionId])
+      expect(listed[1]).toMatchObject({ title: 'MVP', providerId: 'mock', eventCount: 0, lastSeq: -1, createdAt: '2025-12-01T00:00:00.000Z', updatedAt: '2026-02-01T00:00:00.000Z' })
+
+      // Live events past the durable watermark count as activity now: the
+      // session reclaims the top of the list.
+      ctx.sessions.get(SessionId(created.sessionId))!.append('turn/start', { turn: 1 })
+      listed = await sdk.listSessions()
+      expect(listed.map((row) => row.sessionId)).toEqual([created.sessionId, 'session_old'])
+      expect(listed[0]).toMatchObject({ eventCount: 1, lastSeq: 0 })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('resumes agents through the seam with metadata backfilled from persistence', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const rows: FacadeSessionRow[] = [
+      { id: 'session_resumed', status: 'active', providerId: 'mock', modelId: 'mock', title: 'Back from disk', eventCount: 2, lastSeq: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    ]
+    let made: ReturnType<typeof makeFakeAgent> | undefined
+    const facade = new RuntimeFacade(ctx, {
+      persistence: {
+        listSessions: () => rows,
+        saveApiFields: () => {},
+      },
+      resumeAgent: (sessionId) => {
+        if (sessionId !== 'session_resumed') return undefined
+        const session = ctx.sessions.create(SessionId('session_resumed'), {
+          seed: [
+            { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+            { type: 'turn/end', seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+          ],
+        })
+        made = makeFakeAgent(session)
+        return made
+      },
+    })
+    const sdk = createInProcessSdk(facade)
+    try {
+      const resumed = await sdk.resumeSession('session_resumed')
+      expect(resumed).toMatchObject({
+        sessionId: 'session_resumed',
+        title: 'Back from disk',
+        providerId: 'mock',
+        modelId: 'mock',
+        agentStatus: 'idle',
+      })
+      // The seeded turn plus the store's end-seed boundary marker.
+      expect(resumed!.eventCount).toBeGreaterThanOrEqual(2)
+      expect(resumed!.lastSeq).toBe(resumed!.eventCount - 1)
+      // The resumed agent is live for messaging.
+      sdk.sendMessage('session_resumed', 'still there')
+      expect(made!.log.sends).toEqual(['still there'])
+      // Unknown ids resolve undefined; live ones conflict.
+      await expect(sdk.resumeSession('session_ghost')).resolves.toBeUndefined()
+      await expect(sdk.resumeSession('session_resumed')).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('rejects with INTERNAL_ERROR and disposes when the resume seam publishes no session', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    let disposed = false
+    const facade = new RuntimeFacade(ctx, {
+      resumeAgent: () => ({
+        agent: {
+          id: SessionId('session_ghost'),
+          sessionId: SessionId('session_ghost'),
+          status: 'idle',
+          send() {},
+          steer() {},
+          inject() {},
+          abort() {},
+          async whenIdle() {},
+        },
+        dispose: async () => {
+          disposed = true
+        },
+      }),
+    })
+    try {
+      await expect(facade.resumeSession('session_ghost')).rejects.toMatchObject({ code: 'INTERNAL_ERROR' })
+      expect(disposed).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('normalizes every failure into unified structured errors', () => {
     const ctx = new Context()
     void ctx
@@ -180,6 +319,7 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
       ACTION_MIGRATIONS: actions.ACTION_MIGRATIONS,
       SqliteSessionPersistence: persistence.default,
       SESSION_PERSISTENCE_MIGRATIONS: persistence.SESSION_PERSISTENCE_MIGRATIONS,
+      SESSION_API_FIELDS_MIGRATION: persistence.SESSION_API_FIELDS_MIGRATION,
       NodeSqliteDriver: storage.NodeSqliteDriver,
       runMigrations: definition.runMigrations,
     }
@@ -298,6 +438,62 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
     } finally {
       await secondCtx.fiber.dispose()
       reader.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('persists api fields on create and lists durable sessions across a restart', async () => {
+    const dir = tempDir()
+    const path = join(dir, 'rigo.sqlite')
+    const migrations = () => [...m().SESSION_PERSISTENCE_MIGRATIONS, ...m().ACTION_MIGRATIONS, ...m().APPROVAL_MIGRATIONS, m().SESSION_API_FIELDS_MIGRATION]
+    const wire = (ctx: Context) => ({
+      persistence: {
+        listSessions: () => ctx.sessionPersistence.listApiSessions(),
+        saveApiFields: (id: string, fields: FacadeApiFields) => ctx.sessionPersistence.setApiFields(SessionId(id), fields),
+      },
+    })
+    let sessionId = ''
+
+    const firstCtx = new Context()
+    try {
+      await firstCtx.plugin(SessionStore)
+      await firstCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: migrations() })
+      const sdk = createInProcessSdk(new RuntimeFacade(firstCtx, wire(firstCtx)))
+      const created = await sdk.createSession({ cwd: '/tmp/facade-list', providerId: 'mock', modelId: 'mock', title: 'Across restarts' })
+      sessionId = created.sessionId
+      // Not yet materialized (no events): the live overlay still lists it.
+      let listed = await sdk.listSessions()
+      expect(listed.map((row) => row.sessionId)).toEqual([sessionId])
+      expect(listed[0]).toMatchObject({ title: 'Across restarts', eventCount: 0 })
+      const session = firstCtx.sessions.get(SessionId(sessionId))!
+      session.append('turn/start', { turn: 1 })
+      session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      await firstCtx.sessions.flush(session)
+    } finally {
+      await firstCtx.fiber.dispose()
+    }
+
+    const secondCtx = new Context()
+    try {
+      await secondCtx.plugin(SessionStore)
+      await secondCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: migrations() })
+      const sdk = createInProcessSdk(new RuntimeFacade(secondCtx, wire(secondCtx)))
+      const listed = await sdk.listSessions()
+      expect(listed.map((row) => row.sessionId)).toEqual([sessionId])
+      expect(listed[0]).toMatchObject({
+        title: 'Across restarts',
+        providerId: 'mock',
+        modelId: 'mock',
+        cwd: '/tmp/facade-list',
+        status: 'active',
+        agentStatus: 'unavailable',
+        eventCount: 2,
+        lastSeq: 1,
+      })
+      expect(listed[0]!.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(listed[0]!.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    } finally {
+      await secondCtx.fiber.dispose()
       rmSync(dir, { recursive: true, force: true })
     }
   })

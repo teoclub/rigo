@@ -34,6 +34,8 @@ import {
   PersistenceCoordinator,
   SessionPersistence,
   SessionPersistenceRevision,
+  type ApiSessionFields,
+  type ApiSessionRow,
   type PersistenceBackend,
   type SessionPersistenceSnapshot,
   type StoredPrefix,
@@ -87,6 +89,31 @@ CREATE INDEX idx_session_events_turn
   },
 ]
 
+/**
+ * Side table for the API session list (version 4 in the shared session
+ * database — 1 = session tables, 2 = action_executions, 3 = approvals). The
+ * event write path never touches the `sessions` table's provider/model/title
+ * columns (lazy materialization rewrites the whole row), so the API layer
+ * keeps its own mutable copy here; no FK, so a row survives the window where
+ * `sessions` has no row yet. Compose it after the earlier sets:
+ * `[...SESSION_PERSISTENCE_MIGRATIONS, ...ACTION_MIGRATIONS,
+ * ...APPROVAL_MIGRATIONS, SESSION_API_FIELDS_MIGRATION]` — the version gap
+ * makes it unusable inside `SESSION_PERSISTENCE_MIGRATIONS` alone.
+ */
+export const SESSION_API_FIELDS_MIGRATION: StorageMigration = {
+  version: 4,
+  name: 'session-api-fields',
+  sql: `
+CREATE TABLE session_api_fields (
+  id TEXT PRIMARY KEY,
+  provider_id TEXT,
+  model_id TEXT,
+  title TEXT,
+  updated_at TEXT NOT NULL
+);
+`,
+}
+
 /** Retryable SQLite lock-timeout error (SPEC §6.1 `STORAGE_BUSY`, 503, retryable). */
 export class StorageBusyError extends Error {
   readonly code = 'STORAGE_BUSY'
@@ -138,6 +165,19 @@ interface EventRow extends Record<string, unknown> {
   schema_version: number
   payload_json: string
   created_at: string
+}
+
+interface ApiListRow extends Record<string, unknown> {
+  id: string
+  status: string
+  workspace_root: string | null
+  provider_id: string | null
+  model_id: string | null
+  title: string | null
+  event_count: number
+  last_seq: number | null
+  created_at: string
+  updated_at: string
 }
 
 /** Reconstruct the durable header from the metadata_json column (its source of truth). */
@@ -231,12 +271,72 @@ export default class SqliteSessionPersistence extends SessionPersistence impleme
     signal?.throwIfAborted()
     return this.withBusy(() => {
       return this.driver.query<StoredRow & { event_count: number; last_seq: number | null }>(
-        `SELECT s.*, (SELECT COUNT(*) FROM session_events e WHERE e.session_id = s.id) AS event_count,
-                (SELECT MAX(seq) FROM session_events e WHERE e.session_id = s.id) AS last_seq
-         FROM sessions s ORDER BY s.id`,
+        `SELECT s.*, COALESCE(e.event_count, 0) AS event_count, e.last_seq
+         FROM sessions s
+         LEFT JOIN (
+           SELECT session_id, COUNT(*) AS event_count, MAX(seq) AS last_seq
+           FROM session_events
+           GROUP BY session_id
+         ) e ON e.session_id = s.id
+         ORDER BY s.id`,
       ).map((row) => ({
         header: headerFromRow(row),
         revision: this.revision(row, row.event_count, row.last_seq ?? undefined)!,
+      }))
+    })
+  }
+
+  // --- API session list (session_api_fields side table) ---
+
+  override async setApiFields(id: SessionId, fields: ApiSessionFields): Promise<void> {
+    this.withBusy(() => {
+      this.driver.run(
+        `INSERT INTO session_api_fields (id, provider_id, model_id, title, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           provider_id = COALESCE(excluded.provider_id, session_api_fields.provider_id),
+           model_id = COALESCE(excluded.model_id, session_api_fields.model_id),
+           title = COALESCE(excluded.title, session_api_fields.title),
+           updated_at = excluded.updated_at`,
+        [
+          id,
+          fields.providerId ?? null,
+          fields.modelId ?? null,
+          fields.title ?? null,
+          new Date().toISOString(),
+        ],
+      )
+    })
+  }
+
+  override async listApiSessions(signal?: AbortSignal): Promise<ApiSessionRow[]> {
+    signal?.throwIfAborted()
+    return this.withBusy(() => {
+      return this.driver.query<ApiListRow>(
+        `SELECT s.id, s.status, s.workspace_root, f.provider_id, f.model_id, f.title,
+                COALESCE(e.event_count, 0) AS event_count,
+                e.last_seq,
+                s.created_at,
+                MAX(s.updated_at, f.updated_at) AS updated_at
+         FROM sessions s
+         LEFT JOIN session_api_fields f ON f.id = s.id
+         LEFT JOIN (
+           SELECT session_id, COUNT(*) AS event_count, MAX(seq) AS last_seq
+           FROM session_events
+           GROUP BY session_id
+         ) e ON e.session_id = s.id
+         ORDER BY MAX(s.updated_at, f.updated_at) DESC, s.id`,
+      ).map((row) => ({
+        id: row.id,
+        status: row.status,
+        ...(row.workspace_root === null ? {} : { cwd: row.workspace_root }),
+        ...(row.provider_id === null ? {} : { providerId: row.provider_id }),
+        ...(row.model_id === null ? {} : { modelId: row.model_id }),
+        ...(row.title === null ? {} : { title: row.title }),
+        eventCount: row.event_count,
+        ...(row.last_seq === null ? {} : { lastSeq: row.last_seq }),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
       }))
     })
   }

@@ -7,7 +7,7 @@ writable.
 ## Usage
 
 ```ts
-import { Context } from '@teoclub/cordis'
+import { Context } from 'cordis'
 import Loader from '@teoclub/cordis-plugin-loader'
 import Include from '@teoclub/cordis-plugin-include'
 
@@ -41,13 +41,3 @@ Example `cordis.yml`:
 | `enableLogs` | Enables loader apply, reload, and unload logs. |
 
 Patches can insert entries or override fields on entries with a matching `id`.
-
-## Security / Trust Model
-
-Entry-list files may use a `!!js` YAML expression dialect (carried over
-from upstream Cordis) in entry fields such as `config` or `disabled`.
-Expressions are evaluated as JavaScript **in the host process** when the
-entry is loaded. Treat every file read by this plugin (and every patch
-source) as trusted code - never point `path` at untrusted input. There is
-no sandbox and no opt-out flag in this release; the trust boundary is the
-file system.

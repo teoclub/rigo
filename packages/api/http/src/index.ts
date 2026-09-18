@@ -8,6 +8,8 @@
  *   - `POST /api/v1/sessions` — create a session and agent, validating
  *     provider/model existence, the absolute workspace root and the title
  *     bound (AC-2);
+ *   - `GET /api/v1/sessions` — the session list: durable rows (through the
+ *     facade's persistence seam) overlaid with live sessions, newest first;
  *   - `GET /api/v1/sessions/:id` — the session projection (404 envelope
  *     when missing);
  *   - `DELETE /api/v1/sessions/:id` — cancel an active turn first, then
@@ -18,6 +20,10 @@
  *     duplicate input (AC-4);
  *   - `POST /api/v1/sessions/:id/abort` — cancel the current activity
  *     (409 `SESSION_BUSY` when nothing is running);
+ *   - `POST /api/v1/sessions/:id/resume` — restore a persisted session into
+ *     the live store (agent resume when the host wired the seam; headless
+ *     otherwise), 404 when the id was never persisted, 409 when already
+ *     live;
  *   - every failure uses the unified error envelope (SPEC §4.7):
  *     `{ error: { code, message, retryable, requestId } }`, with JSON field
  *     validation failures as `INVALID_REQUEST` (AC-6);
@@ -28,15 +34,79 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { extname, join, normalize, resolve, sep } from 'node:path'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { RuntimeFacade } from '@teoclub/api-sdk'
+import { STATUS_BY_CODE, SSE_RECONNECT_BACKOFF_MS, sseReconnectDelay, type ErrorEnvelope } from '@teoclub/api-wire'
 
 export interface ApiServerOptions {
   facade: RuntimeFacade
+  /**
+   * Current routes contributed by plugins, tried in order BEFORE the built-in chain.
+   *
+   * A contributed route inherits the same Host/Origin/CSRF guard as every
+   * built-in one — `guardRequest` runs before dispatch — so a plugin cannot
+   * accidentally publish an unauthenticated endpoint.
+   */
+  routes?: () => readonly ApiRoute[]
   /** Max JSON body bytes (default 1 MiB). */
   maxBodyBytes?: number
   /** Bound host (default `127.0.0.1` — AC-7). */
   host?: string
+  /**
+   * Directory of built UI assets served for everything outside `/api/v1`.
+   *
+   * Same-origin on purpose: the CSRF token is readable only by a same-origin
+   * page, so serving the UI from anywhere else would break the guard that
+   * protects every state-modifying route.
+   */
+  staticDir?: string
+}
+
+/** What a contributed route is handed. */
+export interface ApiRouteInput {
+  req: IncomingMessage
+  res: ServerResponse
+  /** Path parameters captured from `:name` segments. */
+  params: Readonly<Record<string, string>>
+  url: URL
+  requestId: string
+  /** Read and parse the JSON body (bounded by the server's body cap). */
+  readBody(): Promise<unknown>
+  /** Send a JSON response. */
+  json(status: number, body: unknown): void
+  /** Send the unified error envelope; `status` defaults from the code. */
+  fail(code: string, message: string, opts?: { status?: number; retryable?: boolean; details?: unknown }): void
+}
+
+/** A plugin-contributed `/api/v1` route. */
+export interface ApiRoute {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** `/api/v1`-relative path; `:name` segments are captured into `params`. */
+  path: string
+  handle(input: ApiRouteInput): Promise<void> | void
+}
+
+/**
+ * Match a contributed route pattern against the path segments after `/api/v1`.
+ * @param pattern - the route's path, with `:name` parameter segments.
+ * @param segments - the decoded segments after `/api/v1`.
+ * @returns the captured parameters, or `undefined` when the pattern does not match.
+ */
+function matchContributedPath(pattern: string, segments: readonly string[]): Record<string, string> | undefined {
+  const parts = pattern.split('/').filter(Boolean)
+  if (parts.length !== segments.length) return undefined
+  const params: Record<string, string> = {}
+  for (const [index, part] of parts.entries()) {
+    const segment = segments[index]!
+    if (part.startsWith(':')) {
+      params[part.slice(1)] = segment
+      continue
+    }
+    if (part !== segment) return undefined
+  }
+  return params
 }
 
 export interface ApiServer {
@@ -51,49 +121,82 @@ export interface ApiServer {
 /** Methods that mutate state (SPEC §7.1: CSRF + Origin checks apply). */
 const STATE_MODIFYING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-/** Client reconnect backoff sequence (SPEC §4.5/§6.2: 1s, 2s, 5s, 10s capped). */
-export const SSE_RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000] as const
-
-/** The capped exponential backoff delay for reconnect attempt `attempt` (1-based). */
-export function sseReconnectDelay(attempt: number): number {
-  if (!Number.isSafeInteger(attempt) || attempt < 1) attempt = 1
-  const index = Math.min(attempt - 1, SSE_RECONNECT_BACKOFF_MS.length - 1)
-  return SSE_RECONNECT_BACKOFF_MS[index]!
-}
-
-/** The unified error envelope body (SPEC §4.7). */
-export interface ErrorEnvelope {
-  error: {
-    code: string
-    message: string
-    retryable: boolean
-    /** Structured details; `null` when none (never the raw provider response). */
-    details: unknown
-    requestId: string
-  }
-}
-
-/** Status-code mapping for the structured codes the facade raises. */
-const STATUS_BY_CODE: Record<string, number> = {
-  INVALID_REQUEST: 400,
-  PATH_OUTSIDE_WORKSPACE: 403,
-  SESSION_NOT_FOUND: 404,
-  PROVIDER_NOT_FOUND: 422,
-  SESSION_BUSY: 409,
-  IDEMPOTENCY_CONFLICT: 409,
-  APPROVAL_NOT_FOUND: 404,
-  APPROVAL_ALREADY_DECIDED: 409,
-  APPROVAL_EXPIRED: 410,
-  DOCUMENT_NOT_FOUND: 404,
-  DOCUMENT_VERSION_CONFLICT: 409,
-  DOCUMENT_ENCODING_INVALID: 422,
-  OPERATION_ABORTED: 409,
-  MODEL_RATE_LIMITED: 503,
-  STORAGE_BUSY: 503,
-}
+// The reconnect policy and the error envelope are part of the wire contract:
+// they live in `@teoclub/api-wire` (Issue 039) and are re-exported here so
+// existing `from '@teoclub/api-http'` import sites keep working.
+export { SSE_RECONNECT_BACKOFF_MS, sseReconnectDelay }
+export type { ErrorEnvelope }
 
 function statusFor(code: string): number {
   return STATUS_BY_CODE[code] ?? 500
+}
+
+function envelopeMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string' && error.length > 0) return error
+  const message = (error as { message?: unknown } | null)?.message
+  if (typeof message === 'string' && message.length > 0 && message !== '[object Object]') return message
+  if (message !== undefined && message !== null && typeof message !== 'string') {
+    try {
+      const encoded = JSON.stringify(message)
+      if (typeof encoded === 'string' && encoded.length > 0) return encoded
+    } catch {
+      // Fall through.
+    }
+  }
+  return 'internal error'
+}
+
+/** Content types for the built UI. Anything else is served as octet-stream. */
+const STATIC_TYPES: Readonly<Record<string, string>> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json; charset=utf-8',
+}
+
+/**
+ * Serve one built-UI asset, falling back to `index.html` for client routes.
+ *
+ * The fallback is what makes deep links work: the UI is a single page, so any
+ * path that is not a file is a route the page itself resolves.
+ * @param root - absolute asset directory.
+ * @param pathname - the request path.
+ * @param req - the request (only GET/HEAD are served).
+ * @param res - the response.
+ * @returns true when a response was written.
+ */
+async function serveStatic(root: string, pathname: string, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const method = req.method ?? 'GET'
+  if (method !== 'GET' && method !== 'HEAD') return false
+  // Containment: normalize first, then require the result to stay under root,
+  // so `..` and absolute segments cannot escape the asset directory.
+  const relative = normalize(decodeURIComponent(pathname)).replace(/^([/\\])+/, '')
+  const candidate = resolve(join(root, relative))
+  if (candidate !== root && !candidate.startsWith(root + sep)) return false
+  for (const target of relative === '' ? [join(root, 'index.html')] : [candidate, join(root, 'index.html')]) {
+    try {
+      const body = await readFile(target)
+      res.writeHead(200, {
+        'content-type': STATIC_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream',
+        'content-length': String(body.byteLength),
+        // Assets are content-addressed by the build; the shell is not.
+        'cache-control': target.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+      })
+      res.end(method === 'HEAD' ? undefined : body)
+      return true
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return false
 }
 
 /** Read and parse a JSON request body (bounded). */
@@ -179,6 +282,10 @@ function requireMessageContent(): (value: unknown) => string | undefined {
  */
 export function createApiServer(options: ApiServerOptions): ApiServer {
   const facade = options.facade
+  // A getter, not a snapshot: plugins may contribute routes before or after
+  // the server is created, and the server must see the current set either way.
+  const contributedRoutes = options.routes ?? ((): readonly ApiRoute[] => [])
+  const staticDir = options.staticDir === undefined ? undefined : resolve(options.staticDir)
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   const host = options.host ?? '127.0.0.1'
 
@@ -231,11 +338,33 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
     const parts = url.pathname.split('/').filter(Boolean)
     // /api/v1/...
     if (parts[0] !== 'api' || parts[1] !== 'v1') {
+      if (staticDir !== undefined && await serveStatic(staticDir, url.pathname, req, res)) return
       sendEnvelope(res, { code: 'INVALID_REQUEST', message: 'unknown endpoint' }, requestId, 404)
       return
     }
     const route = parts.slice(2)
     const method = req.method ?? 'GET'
+
+    // Contributed routes win over the built-in chain. They are matched AFTER
+    // the guard above, so a plugin route is fenced exactly like a built-in one.
+    for (const contributed of contributedRoutes()) {
+      if (contributed.method !== method) continue
+      const params = matchContributedPath(contributed.path, route)
+      if (params === undefined) continue
+      await contributed.handle({
+        req,
+        res,
+        params,
+        url,
+        requestId,
+        readBody: () => readJsonBody(req, maxBodyBytes),
+        json: (status, body) => sendJson(res, status, body),
+        fail: (code, message, opts) => {
+          sendEnvelope(res, { code, message, retryable: opts?.retryable ?? false, details: opts?.details ?? null }, requestId, opts?.status ?? STATUS_BY_CODE[code])
+        },
+      })
+      return
+    }
 
     if (route.length === 1 && route[0] === 'health' && method === 'GET') {
       const health = await facade.health()
@@ -315,8 +444,24 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
       return
     }
 
+    if (route.length === 1 && route[0] === 'sessions' && method === 'GET') {
+      const sessions = await facade.listSessions()
+      sendJson(res, 200, { sessions })
+      return
+    }
+
     if (route.length === 2 && route[0] === 'sessions' && method === 'GET') {
       const session = facade.getSession(route[1]!)
+      if (session === undefined) {
+        sendEnvelope(res, { code: 'SESSION_NOT_FOUND', message: `session "${route[1]}" not found` }, requestId, 404)
+        return
+      }
+      sendJson(res, 200, { session })
+      return
+    }
+
+    if (route.length === 3 && route[0] === 'sessions' && route[2] === 'resume' && method === 'POST') {
+      const session = await facade.resumeSession(route[1]!)
       if (session === undefined) {
         sendEnvelope(res, { code: 'SESSION_NOT_FOUND', message: `session "${route[1]}" not found` }, requestId, 404)
         return
@@ -474,7 +619,7 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
     const code = typeof (error as { code?: unknown })?.code === 'string'
       ? String((error as { code: string }).code)
       : 'INTERNAL_ERROR'
-    const message = error instanceof Error ? error.message : String(error)
+    const message = envelopeMessage(error)
     const retryable = typeof (error as { retryable?: unknown })?.retryable === 'boolean'
       ? (error as { retryable: boolean }).retryable
       : false

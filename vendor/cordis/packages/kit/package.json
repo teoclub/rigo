@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/kit",
   "description": "A collection of common utilities",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -23,14 +23,14 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/cosmokit",
       "upstreamPackage": "@deepseek-ai/cosmokit",
-      "upstreamVersion": "1.8.2",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+      "upstreamVersion": "1.8.3",
+      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
     }
   },
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
       "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
       "import": "./lib/index.js"
     },
     "./src/*": "./src/*",

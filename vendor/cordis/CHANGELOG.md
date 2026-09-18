@@ -6,6 +6,104 @@ the three categories used by this project: **Breaking**, **Fix**,
 Bun engines). This file is managed in the Changesets style; automated
 releases use the `cordis-v5` release-train tag.
 
+## 2026-09-18 - Upstream re-sync: the transactional reload revert
+
+Re-synced from upstream `dsh-v0.1.6-alpha.2` (`ddefc45`). Upstream reverted its
+transactional Cordis reload work (PR #932); this release adopts that revert in
+full. See `docs/upstream.md` for the complete record.
+
+### `@teoclub/cordis` 6.0.0
+
+**Breaking**
+
+- `Fiber.update()` returns nothing again and `internal/update` is synchronous
+  again: the restart runs behind the waterfall, so a caller can no longer await
+  it or receive its failure. A plugin that throws during a config-driven
+  restart now escapes as an unhandled rejection.
+- The `Fiber`-level rollback guarantees are gone with the transactional Loader.
+  Refer to PRD FR-LOADER-003 / SPEC §5.1.4, which are amended: a failed entry
+  update leaves the entry where the attempt reached instead of restoring the
+  previous plugin or config.
+- Major version 6.0.0 declares that removal (BC-4), continuing the 5.0.0
+  distribution line's convention.
+
+**Runtime-diff**
+
+- The unhandled rejection above reaches the Node `unhandledRejection` hook;
+  under Bun the runtime reports it itself and never calls that hook.
+
+### `@teoclub/kit` 1.8.3
+
+- Continues cosmokit 1.8.3. README re-applied over the new upstream text
+  (TEO Club identity, install command, not-affiliated statement).
+
+### `@teoclub/schemastery` 3.18.2
+
+- Continues `@deepseek-ai/schemastery` 3.18.2.
+
+### `@teoclub/cordis-plugin-loader` 1.0.3
+
+**Breaking**
+
+- Entry/group/tree mutations are eager and non-transactional: `Entry.update()`,
+  `EntryGroup.update()`, and `EntryTree.update()` no longer restore previous
+  state when a step fails.
+- `Entry.update()` no longer re-imports when `name` changes; the running fiber
+  keeps its plugin until the entry is recreated.
+
+**Fix**
+
+- `ModuleLoader.fromInternal()` classifies the internal loader by which
+  module-job API it owns instead of by Node major. Node 24.0-24.11.1 report
+  major 24 while still carrying the v1 loader, so the previous test made
+  consumers call `resolveSync` with reversed parameters on every call.
+
+### `@teoclub/cordis-plugin-include` 1.0.7
+
+**Breaking**
+
+- `refresh()` no longer throws: it logs and keeps the running tree, and the
+  child-tree mutation queue is gone.
+- `applyEntryPatches()` only clones its input when a patch list is present.
+
+### `@teoclub/cordis-plugin-hmr` 1.0.17
+
+**Breaking**
+
+- `Hmr.registerConfig()` and the `hmr/config-update-failed` event are deleted.
+  Exact-path watching now lives in the app that owns the config file (for this
+  repo, `@teoclub/harness-app-boot`'s `watchConfig`).
+
+**Fix**
+
+- The `resolveSync` parameter-order probe is gone: the loader now reports its
+  own shape, so `_resolve()` dispatches on `internal.version` (patch 9
+  retired).
+
+**Runtime-diff** (patch 11)
+
+- The watcher matches a booted Include's config path before the module-reload
+  branches. Upstream checks `externals`/`loadCache` first, which under Bun
+  turns every config edit into a full process restart instead of an in-place
+  refresh. `add`/`unlink` listeners are retained so creating or removing a
+  config file refreshes it; the Bun engine is unchanged.
+
+### `@teoclub/cordis-plugin-group` 1.0.2
+
+**Breaking**
+
+- Concise as upstream: group updates are eager, sibling-start failures are
+  contained rather than rolled back.
+
+### `@teoclub/cordis-plugin-timer` 1.1.4
+
+- Continues 1.1.4. Type-only: the internal scheduler handle still avoids
+  naming `NodeJS.Timeout`.
+
+### `@teoclub/cordis-plugin-logger-console` 1.0.2
+
+- Scope rename only.
+
 ## 2026-08-25 - Initial dual-runtime release (P0)
 
 ### `@teoclub/cordis` 5.0.0

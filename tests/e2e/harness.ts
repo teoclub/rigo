@@ -14,6 +14,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Page } from '@playwright/test'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import { Context } from '@teoclub/cordis'
 import { MockAdapter, textResponse, toolCallResponse, type HangAfter } from '@teoclub/harness-llm-mock'
@@ -51,6 +52,20 @@ export interface E2EHarnessOptions {
 }
 
 export const E2E_SECRET_MARKER = 'sk-e2e-secret-4242'
+
+/** Open Settings, fill the session fields, then close the dialog. */
+export async function fillWorkSettings(
+  page: Page,
+  values: { provider: string, model: string, workspaceRoot: string, title?: string },
+): Promise<void> {
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByTestId('provider').fill(values.provider)
+  await page.getByTestId('model').fill(values.model)
+  await page.getByTestId('workspaceRoot').fill(values.workspaceRoot)
+  if (values.title !== undefined) await page.getByTestId('title').fill(values.title)
+  await page.getByRole('button', { name: 'Done' }).click()
+  await page.getByTestId('settingsDialog').waitFor({ state: 'detached' })
+}
 
 /** Extract the per-session write tool name from a request's tool schemas. */
 export function writeToolName(request: { tools?: { name: string }[]; sessionId?: string }): string {

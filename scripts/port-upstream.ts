@@ -16,10 +16,12 @@
  *
  * Re-running the script is safe for KEEP packages (they must stay
  * rewrite-identical; audit-source.ts verifies this). ADAPT packages carry
- * local modifications listed in the audit record and are only ported with
- * --force-adapt.
+ * local modifications listed in the audit record: their local source files,
+ * their hand-maintained test files, and the app-owned test files listed in
+ * LOCAL_TEST_FILES are read back from disk and written out unchanged, so a
+ * re-port adds upstream's changes without discarding ours.
  *
- * Usage: bun scripts/port-upstream.ts <harness-clone-path> [--force-adapt]
+ * Usage: bun scripts/port-upstream.ts <harness-clone-path>
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -28,9 +30,8 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { BASELINE, LOCAL_PACKAGES, PACKAGES, rewriteProse, rewriteTextTokens, rewriteTypeScript, type PackageSpec } from './lib/baseline.ts'
 
 const clone = resolve(process.argv[2] ?? '')
-const forceAdapt = process.argv.includes('--force-adapt')
 if (!clone) {
-  console.error('usage: bun scripts/port-upstream.ts <harness-clone-path> [--force-adapt]')
+  console.error('usage: bun scripts/port-upstream.ts <harness-clone-path>')
   process.exit(1)
 }
 
@@ -137,11 +138,30 @@ const CORDIS_PACKAGES = [
  * surface (catalog generators, export-style lints) that spans packages
  * outside this repo's 22-package closure, so the test would fail here for
  * structural reasons rather than behavioral ones.
+ *
+ * A file listed here is not written by a re-port, so listing the
+ * already-deleted `hmr-config.spec.ts` is what makes its absence reproducible
+ * rather than a deletion a re-port would silently undo.
  */
 const NOT_PORTED_TESTS: { file: string; reason: string }[] = [
   { file: 'packages/core/tools/tests/gen-tool-catalog.spec.ts', reason: 'harvests the tool schemas of every upstream tool package; most are outside the migration closure' },
   { file: 'packages/core/agent/tests/verify-export-jsdoc.spec.ts', reason: 'audits upstream repo-wide export JSDoc conventions' },
   { file: 'packages/core/session/tests/gen-persistence-catalog.spec.ts', reason: 'snapshots the upstream persistence-package catalog; most entries are outside the migration closure' },
+  { file: 'packages/boot/app-boot/tests/hmr-config.spec.ts', reason: 'covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/upstream/app-boot/tests/watch-config.spec.ts supersedes it' },
+]
+
+/**
+ * App-owned test files under `tests/upstream/` that have no upstream
+ * counterpart at the pinned commit, and that a re-port must therefore NOT
+ * delete. Without this list the re-port's `rm -rf` of the destination test
+ * directory removes them silently, because nothing downstream ever looks for
+ * a file upstream does not have.
+ */
+const LOCAL_TEST_FILES: { file: string; reason: string }[] = [
+  {
+    file: 'tests/upstream/app-boot/tests/watch-config.spec.ts',
+    reason: 'local addition: ported from the newer upstream pin, where the transactional HMR revert moved exact config watching into app boot',
+  },
 ]
 
 /**
@@ -149,6 +169,15 @@ const NOT_PORTED_TESTS: { file: string; reason: string }[] = [
  * Each records the upstream file, the textual substitutions, and why - the
  * audit JSON carries them so the Issue 035 compatibility matrix can mark the
  * file `adapted` with its behavioral divergence.
+ *
+ * An entry with an EMPTY substitution list declares a hand-maintained
+ * adaptation: the local file is edited directly and the rewrite is a semantic
+ * one (a behavioral revert, a rewritten fixture) that no textual substitution
+ * can reproduce. Such a file is recorded with its reason and EXEMPT from the
+ * KEEP rewrite-identity byte comparison - the same bargain ADAPT packages
+ * make for their sources. An entry whose declared substitutions stop matching
+ * is a different thing entirely: the pipeline would no longer produce the
+ * file it claims to, so `portTestFile` throws.
  */
 const ADAPTED_TESTS: {
   file: string
@@ -226,6 +255,27 @@ const ADAPTED_TESTS: {
       },
     ],
   },
+  // The app-boot suite follows upstream's own revert of the transactional
+  // loader (PR #932). Rigo took the revert, so the three files below pin
+  // eager, non-transactional containment instead of rollback. The change is
+  // a behavioral rewrite of the expectations, not a textual one, so these
+  // entries declare the divergence with an empty substitution list and no
+  // byte comparison is made against the upstream text.
+  {
+    file: 'packages/boot/app-boot/tests/app-boot.spec.ts',
+    reason: 'reverted Loader: fail-loud diagnostics now come from assertEntriesActivated, which labels each row with its entry id and specifier',
+    substitutions: [],
+  },
+  {
+    file: 'packages/boot/app-boot/tests/config-reload.spec.ts',
+    reason: 'reverted Loader (upstream PR #932): pins eager non-transactional containment instead of rollback; Node-only cases documented as a runtime diff',
+    substitutions: [],
+  },
+  {
+    file: 'packages/boot/app-boot/tests/user-patches.spec.ts',
+    reason: 'reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr-config-update-failed',
+    substitutions: [],
+  },
 ]
 
 /**
@@ -249,11 +299,17 @@ const BUN_SKIPPED_TESTS: { file: string; itOpener: string; reason: string }[] = 
 ]
 
 /**
- * Manifest sections contributed by local-only source modules of ADAPT
- * packages (preserved across re-ports). Keyed by local package name; merged
- * into the regenerated package.json after the upstream-derived sections.
+ * Manifest entries required by local-only source modules of ADAPT packages,
+ * merged into the regenerated package.json after the upstream-derived
+ * sections. Keyed by local package name.
+ *
+ * These MERGE into the upstream-derived dependency maps rather than replacing
+ * them: a local module importing a package upstream does not is an addition,
+ * and overwriting the section would drop what upstream declared. A hand edit
+ * to the generated manifest is what this table exists to avoid — it does not
+ * survive the next re-port, and nothing reports the loss.
  */
-const LOCAL_MANIFEST_ADDITIONS: Record<string, { peerDependencies?: Record<string, string> }> = {
+const LOCAL_MANIFEST_ADDITIONS: Record<string, { peerDependencies?: Record<string, string>; dependencies?: Record<string, string> }> = {
   // Issue 004 minimal core boot (src/core-boot.ts): mounts the per-turn core.
   '@teoclub/harness-app-boot': {
     peerDependencies: {
@@ -264,6 +320,10 @@ const LOCAL_MANIFEST_ADDITIONS: Record<string, { peerDependencies?: Record<strin
       '@teoclub/harness-system-prompt': '*',
       '@teoclub/harness-tools': '*',
     },
+    // src/watch-config.ts is a local module (the exact-config watcher app boot
+    // took over when upstream reverted the transactional loader); it imports
+    // chokidar, which no upstream module here does.
+    dependencies: { chokidar: '^4.0.3' },
   },
 }
 
@@ -387,6 +447,14 @@ export interface PortedTestFile {
   text: string
   edits: number
   omitted: boolean
+  /** An ADAPTED_TESTS entry exists for this file (with or without substitutions). */
+  adapted: boolean
+  /**
+   * Declared with no substitutions: the local file is edited directly, the
+   * pipeline cannot reproduce it, and a re-port must carry the local copy
+   * across rather than overwrite it with the upstream-derived text.
+   */
+  handMaintained: boolean
   appliedSubstitutions: string[]
   reason: string
 }
@@ -404,7 +472,7 @@ export function portTestFile(
   text: string,
 ): PortedTestFile {
   const omission = NOT_PORTED_TESTS.find((t) => t.file === `${spec.upstreamPath}/${rel}`)
-  if (omission) return { text, edits: 0, omitted: true, appliedSubstitutions: [], reason: '' }
+  if (omission) return { text, edits: 0, omitted: true, adapted: false, handMaintained: false, appliedSubstitutions: [], reason: '' }
   const rewritten = rewriteFile(upstreamFile, text)
   // Upstream tests import the sibling source relatively ('../src/x.ts');
   // after the move to tests/upstream/<name>/ they must name the package,
@@ -417,10 +485,17 @@ export function portTestFile(
   const adaptations = ADAPTED_TESTS.filter((t) => t.file === `${spec.upstreamPath}/${rel}`)
   const appliedSubstitutions: string[] = []
   for (const adaptation of adaptations) for (const sub of adaptation.substitutions) {
-    if (sub.find.test(rewritten.text)) {
-      rewritten.text = rewritten.text.replace(sub.find, typeof sub.replace === 'function' ? sub.replace as (...a: string[]) => string : sub.replace)
-      appliedSubstitutions.push(sub.description)
+    if (!sub.find.test(rewritten.text)) {
+      // A declared substitution that no longer matches means upstream moved
+      // under it. Continuing would quietly downgrade the file to
+      // "hand-maintained" and drop it from the byte comparison - the local
+      // file would keep passing while no longer being derived from anything.
+      throw new Error(
+        `${spec.upstreamPath}/${rel}: declared adaptation "${sub.description}" no longer matches the upstream text`,
+      )
     }
+    rewritten.text = rewritten.text.replace(sub.find, typeof sub.replace === 'function' ? sub.replace as (...a: string[]) => string : sub.replace)
+    appliedSubstitutions.push(sub.description)
   }
   // Bun polyfill for vitest APIs bun:test lacks (vi.waitFor/stubEnv).
   // Path from tests/upstream/<name>/<rel> back to repo root is
@@ -454,6 +529,8 @@ export function portTestFile(
     text: rewritten.text,
     edits: rewritten.edits,
     omitted: false,
+    adapted: adaptations.length > 0,
+    handMaintained: adaptations.length > 0 && appliedSubstitutions.length === 0,
     appliedSubstitutions,
     reason: adaptations.map((a) => a.reason).join(' '),
   }
@@ -525,9 +602,27 @@ async function main() {
 
     // Tests -> tests/upstream/<name>/.
     const testDest = join(root, 'tests/upstream', spec.localPath.split('/').pop()!)
+    // Snapshot before the wipe: two kinds of file survive it unchanged and
+    // cannot be re-derived afterwards — a hand-maintained adaptation, and a
+    // file upstream has no counterpart for. Both would otherwise be replaced
+    // by pipeline output (or simply deleted), and the byte-identity check
+    // would then pass against what the run had just written.
+    const onDisk = new Map<string, string>()
+    if (existsSync(testDest)) {
+      const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name)
+          if (entry.isDirectory()) walk(full)
+          else onDisk.set(relative(testDest, full), readFileSync(full, 'utf8'))
+        }
+      }
+      walk(testDest)
+    }
     await rm(testDest, { recursive: true, force: true })
     let omittedTests = 0
+    let preservedTests = 0
     const appliedAdaptations: { file: string; substitutions: string[]; reason: string }[] = []
+    const writtenTests = new Set<string>()
     for (const upstreamFile of testFiles) {
       const rel = relative(spec.upstreamPath, upstreamFile)
       const ported = portTestFile(spec, upstreamFile, rel, gitShow(upstreamFile))
@@ -535,14 +630,35 @@ async function main() {
         omittedTests++
         continue
       }
-      if (ported.appliedSubstitutions.length) {
+      if (ported.adapted) {
         appliedAdaptations.push({ file: rel, substitutions: ported.appliedSubstitutions, reason: ported.reason })
       }
       specifierEdits += ported.edits
+      writtenTests.add(rel)
       await mkdir(dirname(join(testDest, rel)), { recursive: true })
+      if (ported.handMaintained) {
+        const local = onDisk.get(rel)
+        if (local === undefined) {
+          throw new Error(`${spec.localPackage}: ${rel} is declared hand-maintained but has no local copy to preserve`)
+        }
+        preservedTests++
+        await writeFile(join(testDest, rel), local)
+        continue
+      }
       await writeFile(join(testDest, rel), ported.text)
     }
+    for (const local of LOCAL_TEST_FILES) {
+      const rel = relative(`tests/upstream/${spec.localPath.split('/').pop()!}`, local.file)
+      if (rel.startsWith('..') || writtenTests.has(rel)) continue
+      const content = onDisk.get(rel)
+      if (content === undefined) continue
+      await mkdir(dirname(join(testDest, rel)), { recursive: true })
+      await writeFile(join(testDest, rel), content)
+      appliedAdaptations.push({ file: rel, substitutions: [], reason: local.reason })
+      preservedTests++
+    }
     if (omittedTests) console.log(`  omitted ${omittedTests} test file(s) (see docs/harness-upstream-audit.json)`)
+    if (preservedTests) console.log(`  preserved ${preservedTests} hand-maintained test file(s)`)
     if (appliedAdaptations.length) console.log(`  adapted ${appliedAdaptations.length} test file(s) (see docs/harness-upstream-audit.json)`)
 
     // LICENSE (upstream DeepSeek MIT, preserved verbatim per FR-3).
@@ -550,6 +666,7 @@ async function main() {
 
     // package.json regenerated from the upstream manifest.
     const upstreamPkg = JSON.parse(gitShow(`${spec.upstreamPath}/package.json`))
+    const localAdditions = LOCAL_MANIFEST_ADDITIONS[spec.localPackage]
     const pkg = {
       name: spec.localPackage,
       description: rewriteProse(upstreamPkg.description ?? spec.localPackage).text,
@@ -581,12 +698,12 @@ async function main() {
       // keys, error classes). Vite (dev/vitest) resolves the development
       // condition; published consumers (production) get the built lib.
       ...(Object.keys(upstreamPkg.exports ?? {}).length > 0 ? { exports: addDevelopmentConditions(upstreamPkg.exports) } : {}),
-      ...(upstreamPkg.dependencies ? { dependencies: rewriteDepNames(upstreamPkg.dependencies) } : {}),
-      ...(upstreamPkg.peerDependencies ? { peerDependencies: rewriteDepNames(upstreamPkg.peerDependencies) } : {}),
-      // Local-only source modules (ADAPT packages) may import additional
-      // workspace packages; their declarations are merged in after the
-      // upstream-derived sections so a re-port stays complete.
-      ...(LOCAL_MANIFEST_ADDITIONS[spec.localPackage] as Record<string, unknown> | undefined),
+      ...(upstreamPkg.dependencies || localAdditions?.dependencies
+        ? { dependencies: { ...(upstreamPkg.dependencies ? rewriteDepNames(upstreamPkg.dependencies) : {}), ...localAdditions?.dependencies } }
+        : {}),
+      ...(upstreamPkg.peerDependencies || localAdditions?.peerDependencies
+        ? { peerDependencies: { ...(upstreamPkg.peerDependencies ? rewriteDepNames(upstreamPkg.peerDependencies) : {}), ...localAdditions?.peerDependencies } }
+        : {}),
       // Upstream declares these as devDependencies; runtime deps live above.
       ...(upstreamPkg.devDependencies?.['@types/js-yaml'] ? { devDependencies: { '@types/js-yaml': upstreamPkg.devDependencies['@types/js-yaml'] } } : {}),
       files: upstreamPkg.files ?? ['lib/index.js', 'lib/invariant.js', 'lib/types/**/*.d.ts'],
@@ -754,7 +871,7 @@ export default defineConfig([${
 
   // Workspace apps (not packages): first-class members of the typecheck
   // graph, referenced by path like the package projects.
-  const appProjects = ['apps/work-web'] as const
+  const appProjects = ['apps/cli', 'apps/work-web'] as const
 
   // Root tsconfig.json references every ported package plus the vendored
   // cordis family (the sibling checkout's own composite projects). Extending

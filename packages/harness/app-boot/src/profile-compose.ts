@@ -16,9 +16,10 @@
  * the composed tree equals what the Loader would mount. A patch whose target
  * row does not exist is reported through the warn sink (observable, never
  * silent). The composition is pure: a malformed patch list throws without
- * mutating any input, so callers keep the last valid tree; retaining the
- * last good tree across failed live reloads is the Loader's transactional
- * behavior (covered by the upstream config-reload suite).
+ * mutating any input, so callers keep the last valid tree; keeping the last
+ * good tree across a failed live reload is the Include's own containment - a
+ * refresh that cannot read or parse logs and leaves the running tree alone
+ * (covered by the upstream config-reload suite).
  *
  * @module @teoclub/harness-app-boot/profile-compose
  */

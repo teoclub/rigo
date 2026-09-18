@@ -1,18 +1,22 @@
 # Hot Reload (HMR)
 
 The `@teoclub/cordis-plugin-hmr` package ships two engines behind one
-config type and one event surface (`hmr/change`, `hmr/reload`,
-`hmr/config-update-failed`).
+config type and one event surface (`hmr/change`, `hmr/reload`).
 
 ## Shared behavior (Node and Bun)
 
-- Config-file watching: `hmr.registerConfig(filename, refresh)` watches one
-  exact path (including a path under missing parent directories), serializes
-  and coalesces refreshes, and returns an async disposer that closes the
-  watcher and drains active work.
-- Config refresh failures are normalized to `Error`, logged, and broadcast
-  through the parallel `hmr/config-update-failed` event; the running plugin
-  tree is left intact.
+- Config-file watching for a file **inside** the watched module roots: a
+  change whose path matches a booted `Include`'s config file refreshes that
+  include in place rather than going through a module reload. Matching
+  happens before the module-reload branches, so a config edit never becomes a
+  full restart (Node or Bun) and never a partial reload.
+- Watching an exact config path **outside** the module roots is the
+  application's job, not the service's: `Hmr.registerConfig()` was deleted
+  upstream with the transactional reload revert. For this repository,
+  `@teoclub/harness-app-boot`'s `watchConfig(ctx, filename, options, refresh)`
+  provides it — one path including missing parents, serialized and coalesced
+  refreshes, a normalized `Error` logged on failure with the running tree left
+  intact, and an async disposer that closes the watcher and drains active work.
 - Change events are debounced (default 100 ms, configurable): rapid
   consecutive saves merge into one reload round.
 

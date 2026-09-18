@@ -231,12 +231,9 @@ export class LoggerService {
    */
   exporter(exporter: Exporter) {
     return this.ctx.effect(() => {
-      // Capture the registration handle: reading the current sequence number
-      // in the disposer would delete whichever exporter registered LAST
-      // instead of this one.
-      const sn = ++this._snExporter
-      this.exporters.set(sn, exporter)
-      return () => this.exporters.delete(sn)
+      const id = ++this._snExporter
+      this.exporters.set(id, exporter)
+      return () => this.exporters.delete(id)
     }, 'ctx.logger.exporter()')
   }
 

@@ -30,9 +30,11 @@ Third-party dependencies (`@standard-schema/spec`, `js-yaml`, `chokidar`,
 | BC-1 | Package scope changed (`@deepseek-ai/*` -> `@teoclub/*`) | rewrite imports per the table above |
 | BC-2 | `engines` enforced: Node `^22.19.0 \|\| >=24.0.0` | upgrade Node if below 22.19 |
 | BC-3 | `cosmokit` renamed to `@teoclub/kit` | rewrite import specifiers; export names are unchanged |
-| BC-4 | `@teoclub/cordis` is `5.0.0` (major version declaration; semantics unchanged beyond BC-1/2/3) | no action beyond the above |
+| BC-4 | `@teoclub/cordis` is `6.0.0` (major version declaration) | no action beyond the above |
 | BC-5 (fix) | `parallel()` now reports `parallel` (not `emit`) on `internal/dispatch` | update diagnostics listeners that pattern-matched the mode |
 | BC-6 (fix) | HMR module changes under Bun trigger a safe full restart instead of being unavailable | run under a supervisor that respawns on exit code 51 |
+| BC-7 | The transactional Loader is reverted: `Entry.update()` no longer rolls back, no longer re-imports on a `name` change, and `Fiber.update()` returns nothing | stop relying on rollback; treat a failed update as leaving the entry where the attempt reached. See §5.1.4's amendment note |
+| BC-8 | `Hmr.registerConfig()` and `hmr/config-update-failed` are deleted | move exact-path watching into the application (`@teoclub/harness-app-boot`'s `watchConfig`) |
 
 ## Config files
 
@@ -45,18 +47,21 @@ See [upstream.md](upstream.md) for the complete patch list, including:
 
 - `ReflectService` is now exported from the `@teoclub/cordis` root.
 - Logger exporter disposers remove exactly the registered exporter.
-- HMR `resolveSync` works on released Node 24 (patch #9).
+- The Loader classifies the running Node module loader by API shape, so
+  `resolveSync` works across Node 24 minors (upstream fix; patch #9 retired).
+- Logger exporter disposers remove exactly the registered exporter
+  (upstream adopted this fix; the local patch converged and was retired).
 
 ## Version mapping
 
 | `@teoclub/*` | Continues `@deepseek-ai/*` |
 |---|---|
-| `@teoclub/cordis@5.0.0` | `@deepseek-ai/cordis@4.0.1` |
-| `@teoclub/kit@1.8.2` | `@deepseek-ai/cosmokit@1.8.2` |
-| `@teoclub/schemastery@3.18.1` | `@deepseek-ai/schemastery@3.18.1` |
-| `@teoclub/cordis-plugin-loader@1.0.2` | `1.0.2` |
-| `@teoclub/cordis-plugin-include@1.0.6` | `1.0.6` |
-| `@teoclub/cordis-plugin-group@1.0.1` | `1.0.1` |
-| `@teoclub/cordis-plugin-timer@1.1.3` | `1.1.3` |
-| `@teoclub/cordis-plugin-hmr@1.0.16` | `1.0.16` |
-| `@teoclub/cordis-plugin-logger-console@1.0.1` | `1.0.1` |
+| `@teoclub/cordis@6.0.0` | `@deepseek-ai/cordis@4.0.2` |
+| `@teoclub/kit@1.8.3` | `@deepseek-ai/cosmokit@1.8.3` |
+| `@teoclub/schemastery@3.18.2` | `@deepseek-ai/schemastery@3.18.2` |
+| `@teoclub/cordis-plugin-loader@1.0.3` | `1.0.3` |
+| `@teoclub/cordis-plugin-include@1.0.7` | `1.0.7` |
+| `@teoclub/cordis-plugin-group@1.0.2` | `1.0.2` |
+| `@teoclub/cordis-plugin-timer@1.1.4` | `1.1.4` |
+| `@teoclub/cordis-plugin-hmr@1.0.17` | `1.0.17` |
+| `@teoclub/cordis-plugin-logger-console@1.0.2` | `1.0.2` |

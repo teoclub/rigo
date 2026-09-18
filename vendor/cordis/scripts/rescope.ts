@@ -14,9 +14,11 @@
  *
  * Usage: bun scripts/rescope.ts <harness-clone-path> <pinned-commit>
  */
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
+import { materializeVendor } from './upstream-tree.ts'
 
 interface PkgSpec {
   /** vendor directory name inside the harness clone */
@@ -31,30 +33,41 @@ interface PkgSpec {
 }
 
 export const PACKAGES: PkgSpec[] = [
-  { vendorDir: 'cosmokit', destDir: 'packages/kit', oldName: '@deepseek-ai/cosmokit', newName: '@teoclub/kit', version: '1.8.2', description: 'A collection of common utilities' },
-  { vendorDir: 'schemastery', destDir: 'packages/schemastery', oldName: '@deepseek-ai/schemastery', newName: '@teoclub/schemastery', version: '3.18.1', description: 'Type driven schema validator' },
-  { vendorDir: 'cordis', destDir: 'packages/cordis', oldName: '@deepseek-ai/cordis', newName: '@teoclub/cordis', version: '5.0.0', description: 'Meta-Framework for Modern JavaScript Applications' },
-  { vendorDir: 'loader', destDir: 'packages/plugins/loader', oldName: '@deepseek-ai/cordis-plugin-loader', newName: '@teoclub/cordis-plugin-loader', version: '1.0.2', description: 'Plugin loader for cordis' },
-  { vendorDir: 'include', destDir: 'packages/plugins/include', oldName: '@deepseek-ai/cordis-plugin-include', newName: '@teoclub/cordis-plugin-include', version: '1.0.6', description: 'Include files in cordis configurations' },
-  { vendorDir: 'group', destDir: 'packages/plugins/group', oldName: '@deepseek-ai/cordis-plugin-group', newName: '@teoclub/cordis-plugin-group', version: '1.0.1', description: 'Nested plugin group for cordis' },
-  { vendorDir: 'timer', destDir: 'packages/plugins/timer', oldName: '@deepseek-ai/cordis-plugin-timer', newName: '@teoclub/cordis-plugin-timer', version: '1.1.3', description: 'Timer service for cordis' },
-  { vendorDir: 'hmr', destDir: 'packages/plugins/hmr', oldName: '@deepseek-ai/cordis-plugin-hmr', newName: '@teoclub/cordis-plugin-hmr', version: '1.0.16', description: 'Hot Module Replacement Plugin for Cordis' },
-  { vendorDir: 'logger-console', destDir: 'packages/plugins/logger-console', oldName: '@deepseek-ai/cordis-plugin-logger-console', newName: '@teoclub/cordis-plugin-logger-console', version: '1.0.1', description: 'Console logger exporter for cordis' },
+  { vendorDir: 'cosmokit', destDir: 'packages/kit', oldName: '@deepseek-ai/cosmokit', newName: '@teoclub/kit', version: '1.8.3', description: 'A collection of common utilities' },
+  { vendorDir: 'schemastery', destDir: 'packages/schemastery', oldName: '@deepseek-ai/schemastery', newName: '@teoclub/schemastery', version: '3.18.2', description: 'Type driven schema validator' },
+  { vendorDir: 'cordis', destDir: 'packages/cordis', oldName: '@deepseek-ai/cordis', newName: '@teoclub/cordis', version: '6.0.0', description: 'Meta-Framework for Modern JavaScript Applications' },
+  { vendorDir: 'loader', destDir: 'packages/plugins/loader', oldName: '@deepseek-ai/cordis-plugin-loader', newName: '@teoclub/cordis-plugin-loader', version: '1.0.3', description: 'Plugin loader for cordis' },
+  { vendorDir: 'include', destDir: 'packages/plugins/include', oldName: '@deepseek-ai/cordis-plugin-include', newName: '@teoclub/cordis-plugin-include', version: '1.0.7', description: 'Include files in cordis configurations' },
+  { vendorDir: 'group', destDir: 'packages/plugins/group', oldName: '@deepseek-ai/cordis-plugin-group', newName: '@teoclub/cordis-plugin-group', version: '1.0.2', description: 'Nested plugin group for cordis' },
+  { vendorDir: 'timer', destDir: 'packages/plugins/timer', oldName: '@deepseek-ai/cordis-plugin-timer', newName: '@teoclub/cordis-plugin-timer', version: '1.1.4', description: 'Timer service for cordis' },
+  { vendorDir: 'hmr', destDir: 'packages/plugins/hmr', oldName: '@deepseek-ai/cordis-plugin-hmr', newName: '@teoclub/cordis-plugin-hmr', version: '1.0.17', description: 'Hot Module Replacement Plugin for Cordis' },
+  { vendorDir: 'logger-console', destDir: 'packages/plugins/logger-console', oldName: '@deepseek-ai/cordis-plugin-logger-console', newName: '@teoclub/cordis-plugin-logger-console', version: '1.0.2', description: 'Console logger exporter for cordis' },
 ]
+
+/**
+ * Rigo-owned paths inside a destination package that have no upstream
+ * counterpart. The generator writes over upstream-derived paths and never
+ * deletes anything, so these survive by construction; this table exists so
+ * `verify-teo-patches.ts` can assert they are still present after a sync -
+ * the check that would have caught the old `rm(destDir)` behavior.
+ */
+export const PROTECTED: Record<string, string[]> = {
+  'packages/plugins/hmr': ['src/engine'],
+}
 
 const RENAME_MAP = new Map(PACKAGES.map((p) => [p.oldName, p]))
 /** Upstream cordiverse names that also appear in vendored READMEs/docs. */
 const UPSTREAM_NAME_MAP = new Map(PACKAGES.filter((p) => p.oldName.includes('plugin')).map((p) => [`@cordisjs/plugin-${p.vendorDir}`, p]))
 const UPSTREAM_VERSION: Record<string, string> = {
-  '@teoclub/kit': '1.8.2',
-  '@teoclub/schemastery': '3.18.1',
-  '@teoclub/cordis': '4.0.1',
-  '@teoclub/cordis-plugin-loader': '1.0.2',
-  '@teoclub/cordis-plugin-include': '1.0.6',
-  '@teoclub/cordis-plugin-group': '1.0.1',
-  '@teoclub/cordis-plugin-timer': '1.1.3',
-  '@teoclub/cordis-plugin-hmr': '1.0.16',
-  '@teoclub/cordis-plugin-logger-console': '1.0.1',
+  '@teoclub/kit': '1.8.3',
+  '@teoclub/schemastery': '3.18.2',
+  '@teoclub/cordis': '4.0.2',
+  '@teoclub/cordis-plugin-loader': '1.0.3',
+  '@teoclub/cordis-plugin-include': '1.0.7',
+  '@teoclub/cordis-plugin-group': '1.0.2',
+  '@teoclub/cordis-plugin-timer': '1.1.4',
+  '@teoclub/cordis-plugin-hmr': '1.0.17',
+  '@teoclub/cordis-plugin-logger-console': '1.0.2',
 }
 
 const root = resolve(import.meta.dir, '..')
@@ -68,7 +81,7 @@ function mapSpecifier(spec: string): string | null {
   return null
 }
 
-async function* walk(dir: string): AsyncIterable<string> {
+export async function* walk(dir: string): AsyncIterable<string> {
   const entries = await readdir(dir, { withFileTypes: true })
   for (const entry of entries) {
     const full = join(dir, entry.name)
@@ -78,7 +91,7 @@ async function* walk(dir: string): AsyncIterable<string> {
 }
 
 /** Channel A: AST-based specifier rewrite for a single .ts file. */
-function rescopeTypeScript(text: string, fileName: string): { text: string; edits: number } {
+export function rescopeTypeScript(text: string, fileName: string): { text: string; edits: number } {
   const sourceFile = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
   const edits: { start: number; end: number; replacement: string }[] = []
 
@@ -122,7 +135,7 @@ function rescopeTypeScript(text: string, fileName: string): { text: string; edit
 }
 
 /** Channel B: quoted complete package-name token rewrite for text files. */
-function rescopeTextTokens(text: string): { text: string; edits: number } {
+export function rescopeTextTokens(text: string): { text: string; edits: number } {
   let edits = 0
   let out = text
   for (const oldName of RENAME_MAP.keys()) {
@@ -181,10 +194,18 @@ async function generateManifest(spec: PkgSpec, vendorPkg: any): Promise<Record<s
     },
   }
 
+  // Every vendored entry point carries the same `development` export
+  // condition the local Rigo packages do, so `node --conditions=development`
+  // resolves the vendored family to SOURCE exactly as vite, vitest and bun
+  // already do through `tsconfig.paths.json`. Without it a plain node process
+  // falls through to `lib/`, where the build has erased `const enum
+  // FiberState` — the module then loads and fails on a missing named export,
+  // which reads as a code bug rather than a resolution one.
   if (spec.vendorDir === 'schemastery') {
     manifest.module = 'lib/index.mjs'
     manifest.exports = {
       '.': {
+        development: './src/index.ts',
         types: './lib/types/index.d.ts',
         import: './lib/index.mjs',
         require: './lib/index.cjs',
@@ -197,6 +218,7 @@ async function generateManifest(spec: PkgSpec, vendorPkg: any): Promise<Record<s
     manifest.types = 'lib/types/shared.d.ts'
     manifest.exports = {
       '.': {
+        development: './src/index.ts',
         types: './lib/types/shared.d.ts',
         node: './lib/index.js',
         default: './lib/browser.js',
@@ -208,6 +230,7 @@ async function generateManifest(spec: PkgSpec, vendorPkg: any): Promise<Record<s
   } else {
     manifest.exports = {
       '.': {
+        development: './src/index.ts',
         types: './lib/types/index.d.ts',
         import: './lib/index.js',
       },
@@ -286,7 +309,7 @@ async function rewriteTsConfig(text: string, oldDir: string, newDir: string, ven
 
 /** Docs mode: replace every textual occurrence of the old full names (both
  * scoped forms). Unrelated names like `@cordisjs/unyaml` are untouched. */
-function rescopeDocs(text: string): { text: string; edits: number } {
+export function rescopeDocs(text: string): { text: string; edits: number } {
   let edits = 0
   let out = text
   for (const [oldName, pkg] of [...RENAME_MAP, ...UPSTREAM_NAME_MAP]) {
@@ -310,7 +333,12 @@ async function main() {
     console.error('usage: bun scripts/rescope.ts <harness-clone-path> <pinned-commit>')
     process.exit(1)
   }
-  const vendorRoot = join(clonePath, 'vendor')
+  // Read the pinned commit, never the clone's working tree: the checkout can
+  // sit at any revision, and a working-tree copy silently mixes them into the
+  // vendored packages.
+  const upstream = materializeVendor(clonePath, pinnedCommit, PACKAGES.map((p) => p.vendorDir))
+  process.on('exit', () => upstream.dispose())
+  const vendorRoot = join(upstream.root, 'vendor')
   process.env.CORDIS_UPSTREAM_COMMIT = pinnedCommit
 
   let astEdits = 0
@@ -319,7 +347,12 @@ async function main() {
   for (const spec of PACKAGES) {
     const srcDir = join(vendorRoot, spec.vendorDir)
     const destDir = join(root, spec.destDir)
-    await rm(destDir, { recursive: true, force: true })
+    // Never delete the destination. It holds Rigo-owned files with no upstream
+    // counterpart (`PROTECTED` above, plus the git-tracked `src/` build
+    // output), which a `rm -rf` here would destroy. The generator only writes
+    // over upstream-derived paths; a path the new upstream tree no longer has
+    // is left in place for `git status` to surface rather than silently
+    // removed. `merge-teo.ts` restores the TEO-patched files afterwards.
     await mkdir(destDir, { recursive: true })
 
     // copy source trees and static assets (behavior-preserving; SPEC §3.4)
@@ -366,4 +399,5 @@ async function main() {
   console.log(`rescoped ${PACKAGES.length} packages: ${astEdits} AST edits, ${textEdits} text edits`)
 }
 
-main()
+// Guarded so `merge-teo.ts` can import the transforms without re-running the copy.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

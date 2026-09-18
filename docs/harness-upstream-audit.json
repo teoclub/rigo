@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T18:20:21.611Z",
+  "generatedAt": "2026-09-18T04:50:13.111Z",
   "baseline": {
     "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
     "tag": "dsh-v0.1.1-rc.2",
@@ -330,7 +330,7 @@
     {
       "localPackage": "@teoclub/harness-session-persistence",
       "upstreamPath": "packages/session/session-persistence",
-      "classification": "KEEP",
+      "classification": "ADAPT",
       "srcFiles": 6,
       "testFiles": 5,
       "omittedTestFiles": [],
@@ -357,7 +357,7 @@
         "@teoclub/harness-session",
         "@teoclub/harness-timeout"
       ],
-      "adapted": false
+      "adapted": true
     },
     {
       "localPackage": "@teoclub/harness-settings",
@@ -408,9 +408,35 @@
       "classification": "ADAPT",
       "srcFiles": 3,
       "testFiles": 6,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 28,
+      "omittedTestFiles": [
+        {
+          "file": "tests/hmr-config.spec.ts",
+          "reason": "covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/upstream/app-boot/tests/watch-config.spec.ts supersedes it"
+        }
+      ],
+      "adaptedTestFiles": [
+        {
+          "file": "tests/app-boot.spec.ts",
+          "substitutions": [],
+          "reason": "reverted Loader: fail-loud diagnostics now come from assertEntriesActivated, which labels each row with its entry id and specifier"
+        },
+        {
+          "file": "tests/config-reload.spec.ts",
+          "substitutions": [],
+          "reason": "reverted Loader (upstream PR #932): pins eager non-transactional containment instead of rollback; Node-only cases documented as a runtime diff"
+        },
+        {
+          "file": "tests/user-patches.spec.ts",
+          "substitutions": [],
+          "reason": "reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr-config-update-failed"
+        },
+        {
+          "file": "tests/watch-config.spec.ts",
+          "substitutions": [],
+          "reason": "local addition: ported from the newer upstream pin, where the transactional HMR revert moved exact config watching into app boot"
+        }
+      ],
+      "specifierEdits": 24,
       "deps": [
         "@teoclub/harness-agent",
         "@teoclub/harness-agent-loop",

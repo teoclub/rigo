@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@teoclub/cordis'
-import { SessionStore, type AgentCancelCause, type Session } from '@teoclub/harness-session'
+import { SessionStore, SessionId, type AgentCancelCause, type Session } from '@teoclub/harness-session'
 import type { PublicAgent } from '@teoclub/harness-agent-protocol'
 import { RuntimeFacade, type SessionSnapshot } from '@teoclub/api-sdk'
 import { createApiServer, type ApiServer } from '@teoclub/api-http'
@@ -188,6 +188,94 @@ describe('http api /api/v1 (Issue 028)', () => {
     expect(missing.body).toMatchObject({ error: { code: 'SESSION_NOT_FOUND' } })
   })
 
+  it('lists live sessions and guards resume with 404/409/CSRF', async () => {
+    const { base } = await server()
+    const first = await jsonFetch(base, '/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ providerId: 'openai-compatible', modelId: 'default', workspaceRoot: '/tmp/ws', title: 'First' }),
+    })
+    const firstId = (first.body as { session: SessionSnapshot }).session.sessionId
+    const second = await jsonFetch(base, '/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ providerId: 'openai-compatible', modelId: 'default', workspaceRoot: '/tmp/ws' }),
+    })
+    const secondId = (second.body as { session: SessionSnapshot }).session.sessionId
+
+    // GET /api/v1/sessions lists every live session.
+    const list = await jsonFetch(base, '/api/v1/sessions')
+    expect(list.status).toBe(200)
+    const sessions = (list.body as { sessions: SessionSnapshot[] }).sessions
+    expect(sessions.map((session) => session.sessionId).sort()).toEqual([firstId, secondId].sort())
+    expect(sessions.every((session) => session.status === 'active' && session.agentStatus === 'idle')).toBe(true)
+
+    // POST resume without the CSRF token is rejected by the guard.
+    const unguarded = await fetch(`${base}/api/v1/sessions/${firstId}/resume`, { method: 'POST' })
+    expect(unguarded.status).toBe(403)
+    expect(await unguarded.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } })
+
+    // Unknown ids → 404 SESSION_NOT_FOUND; live ones → 409.
+    const unknown = await jsonFetch(base, '/api/v1/sessions/session_ghost/resume', { method: 'POST', body: '{}' })
+    expect(unknown.status).toBe(404)
+    expect(unknown.body).toMatchObject({ error: { code: 'SESSION_NOT_FOUND' } })
+    const live = await jsonFetch(base, `/api/v1/sessions/${firstId}/resume`, { method: 'POST', body: '{}' })
+    expect(live.status).toBe(409)
+    expect(live.body).toMatchObject({ error: { code: 'IDEMPOTENCY_CONFLICT' } })
+  })
+
+  it('resumes persisted sessions with their api fields through the seams', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const state = { sends: [], aborts: [], disposed: false } as FakeAgentState
+    const facade = new RuntimeFacade(ctx, {
+      persistence: {
+        listSessions: () => [
+          { id: 'session_persisted', status: 'active', cwd: '/tmp/ws', providerId: 'openai-compatible', modelId: 'default', title: 'From a previous run', eventCount: 2, lastSeq: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+        ],
+        saveApiFields: () => {},
+      },
+      resumeAgent: (sessionId) => {
+        if (sessionId !== 'session_persisted') return undefined
+        const session = ctx.sessions.create(SessionId('session_persisted'), {
+          seed: [
+            { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+            { type: 'turn/end', seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+          ],
+        })
+        return makeFakeAgent(session, state)
+      },
+    })
+    const api = createApiServer({ facade })
+    const port = await api.listen(0)
+    openServers.push({ api, ctx })
+    try {
+      const base = `http://127.0.0.1:${port}`
+      // The durable-only row lists as a not-live session.
+      const list = await jsonFetch(base, '/api/v1/sessions')
+      expect((list.body as { sessions: SessionSnapshot[] }).sessions).toHaveLength(1)
+      expect((list.body as { sessions: SessionSnapshot[] }).sessions[0]).toMatchObject({
+        sessionId: 'session_persisted',
+        title: 'From a previous run',
+        agentStatus: 'unavailable',
+      })
+      // Resume restores it with the persisted metadata.
+      const resumed = await jsonFetch(base, '/api/v1/sessions/session_persisted/resume', { method: 'POST', body: '{}' })
+      expect(resumed.status).toBe(200)
+      const resumedSession = (resumed.body as { session: SessionSnapshot }).session
+      expect(resumedSession).toMatchObject({
+        sessionId: 'session_persisted',
+        title: 'From a previous run',
+        providerId: 'openai-compatible',
+        agentStatus: 'idle',
+      })
+      // The seeded turn plus the store's end-seed boundary marker.
+      expect(resumedSession.eventCount).toBeGreaterThanOrEqual(2)
+    } finally {
+      await api.close()
+      await ctx.fiber.dispose()
+      openServers.pop()
+    }
+  })
+
   it('accepts messages with unique clientMessageId and replays duplicates', async () => {
     const { base, agents } = await server()
     const created = await jsonFetch(base, '/api/v1/sessions', {
@@ -282,7 +370,7 @@ describe('http api /api/v1 (Issue 028)', () => {
     const { base } = await server()
     const unknown = await jsonFetch(base, '/api/v1/nope')
     expect(unknown.status).toBe(404)
-    expect(unknown.body).toMatchObject({ error: { code: 'INVALID_REQUEST', retryable: false } })
+    expect(unknown.body).toMatchObject({ error: { code: 'INVALID_REQUEST', message: 'unknown endpoint', retryable: false } })
     const wrongMethod = await jsonFetch(base, '/api/v1/health', { method: 'POST' })
     expect(wrongMethod.status).toBe(404)
     expect((wrongMethod.body as { error: { code: string } }).error.code).toBe('INVALID_REQUEST')

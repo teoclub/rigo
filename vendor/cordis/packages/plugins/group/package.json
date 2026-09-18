@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/cordis-plugin-group",
   "description": "Nested plugin group for cordis",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -23,12 +23,13 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/group",
       "upstreamPackage": "@deepseek-ai/cordis-plugin-group",
-      "upstreamVersion": "1.0.1",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e"
+      "upstreamVersion": "1.0.2",
+      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
     }
   },
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "types": "./lib/types/index.d.ts",
       "import": "./lib/index.js"
     },
@@ -44,7 +45,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@teoclub/cordis-plugin-loader": "^1.0.2",
-    "@teoclub/cordis": "^5.0.0"
+    "@teoclub/cordis-plugin-loader": "^1.0.3",
+    "@teoclub/cordis": "^6.0.0"
   }
 }

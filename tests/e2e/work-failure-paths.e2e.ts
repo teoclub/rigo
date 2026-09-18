@@ -26,6 +26,7 @@ import { NodeSqliteDriver } from '@teoclub/shared-storage-sqlite-node/node'
 import {
   E2E_SECRET_MARKER,
   failingScript,
+  fillWorkSettings,
   happyPathScript,
   startHarness,
   type E2EHarness,
@@ -194,10 +195,12 @@ test('denial: target document unchanged, UI + audit show the structured denial',
   })
   try {
     await page.goto(harness.baseUrl)
-    await page.getByTestId('provider').fill('mock')
-    await page.getByTestId('model').fill('mock')
-    await page.getByTestId('workspaceRoot').fill(harness.workspace)
-    await page.getByTestId('title').fill('Denial session')
+    await fillWorkSettings(page, {
+      provider: 'mock',
+      model: 'mock',
+      workspaceRoot: harness.workspace,
+      title: 'Denial session',
+    })
     await page.getByTestId('createButton').click()
     await expect(page.getByTestId('sessionTitle')).toContainText('Denial session')
 
@@ -491,10 +494,12 @@ test('credentials: the secret marker never appears in any surface', async ({ pag
   const harness = await startHarness({ script: failingScript() })
   try {
     await page.goto(harness.baseUrl)
-    await page.getByTestId('provider').fill('mock')
-    await page.getByTestId('model').fill('mock')
-    await page.getByTestId('workspaceRoot').fill(harness.workspace)
-    await page.getByTestId('title').fill('Credential session')
+    await fillWorkSettings(page, {
+      provider: 'mock',
+      model: 'mock',
+      workspaceRoot: harness.workspace,
+      title: 'Credential session',
+    })
     await page.getByTestId('createButton').click()
     await page.getByTestId('messageInput').fill('first')
     await page.getByTestId('sendButton').click()

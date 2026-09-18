@@ -75,7 +75,7 @@ Continues cosmokit 1.8.2 exports unchanged (`defineProperty`, `isNullable`,
 | `cordis-plugin-include` | `Include`, `applyEntryPatches`, `entryListSchema`, config watching |
 | `cordis-plugin-group` | `Group` (stable entry naming + default export thin layer) |
 | `cordis-plugin-timer` | `ctx.timer.timeout/interval/throttle/debounce`, `ctx.setTimeout` (deprecated), `ctx.setInterval` (deprecated) |
-| `cordis-plugin-hmr` | `ctx.hmr`, `hmr.registerConfig`, events `hmr/change`, `hmr/reload`, `hmr/config-update-failed` |
+| `cordis-plugin-hmr` | `ctx.hmr`, events `hmr/change`, `hmr/reload` (exact-path config watching is app-owned; see `@teoclub/harness-app-boot`'s `watchConfig`) |
 | `cordis-plugin-logger-console` | `ConsoleLogger` plugin; node + browser entries |
 
 ## CLI

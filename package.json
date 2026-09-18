@@ -25,7 +25,9 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
+    "start": "node --experimental-transform-types --conditions=development apps/cli/bin.js",
     "dev": "node --experimental-transform-types --conditions=development scripts/dev.ts",
+    "build:web": "vite build --config apps/work-web/vite.config.ts",
     "build": "tsc -b && tsdown",
     "audit:source": "bun scripts/audit-source.ts",
     "lint": "oxlint packages apps examples scripts",
@@ -106,6 +108,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.0",
+    "chokidar": "^4.0.3",
     "fast-check": "^3.23.0",
     "js-yaml": "^4.1.0",
     "jsdom": "^30.0.1",

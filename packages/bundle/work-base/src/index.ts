@@ -28,7 +28,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { Context, type Plugin } from '@teoclub/cordis'
 import { bootCore, type CoreBootHandle } from '@teoclub/harness-app-boot'
-import { createAgent } from '@teoclub/harness-agent-protocol'
+import { createAgent, resumeAgent as resumeAgentHandle } from '@teoclub/harness-agent-protocol'
 import ContextService from '@teoclub/harness-context'
 import { SessionId, type Session } from '@teoclub/harness-session'
 import { attachToolSchemasToContext } from '@teoclub/harness-tools-protocol'
@@ -37,7 +37,7 @@ import ApprovalsService, { APPROVAL_MIGRATIONS } from '@teoclub/shared-approvals
 import AuditService from '@teoclub/shared-audit'
 import KnowledgeService from '@teoclub/shared-knowledge'
 import SqliteFtsKnowledgeProvider, { KNOWLEDGE_MIGRATIONS } from '@teoclub/shared-knowledge-sqlite-fts'
-import SqliteSessionPersistence, { SESSION_PERSISTENCE_MIGRATIONS } from '@teoclub/shared-session-persistence-sqlite'
+import SqliteSessionPersistence, { SESSION_API_FIELDS_MIGRATION, SESSION_PERSISTENCE_MIGRATIONS } from '@teoclub/shared-session-persistence-sqlite'
 import { NodeSqliteDriver } from '@teoclub/shared-storage-sqlite-node/node'
 import { runMigrations } from '@teoclub/shared-storage-sqlite-node/definition'
 import { WorkKnowledgeContributor } from '@teoclub/work-context'
@@ -48,6 +48,10 @@ import { registerReadDocumentTool } from '@teoclub/work-tool-document-read'
 import { registerWriteDocumentTool } from '@teoclub/work-tool-document-write'
 import { RuntimeFacade } from '@teoclub/api-sdk'
 import { createApiServer } from '@teoclub/api-http'
+import { clientFeaturesPlugin, compositionPlugin } from './client-composition.ts'
+import { mountSessionDefaults } from './session-defaults.ts'
+export { ApiRouteRegistry, ClientPluginRegistry, clientFeaturesPlugin, compositionPlugin, CLIENT_FEATURE_IDS, CLIENT_PLUGINS_ROUTE } from './client-composition.ts'
+export { mountSessionDefaults, SESSION_DEFAULTS_ROUTE, SessionDefaultsService, type SessionDefaults } from './session-defaults.ts'
 
 // ---------------------------------------------------------------------------
 // The plugin tree (AC-7)
@@ -145,11 +149,16 @@ export interface WorkBaseConfig {
   port?: number
   /** Disable the document write tool + action while keeping reads (AC-6). */
   disableWriteTool?: boolean
+  /**
+   * Directory of built UI assets to serve for everything outside `/api/v1`.
+   * Omitted means API-only (the dev server proxies instead).
+   */
+  staticDir?: string
 }
 
-/** The session-database migration set (v1 sessions + v2 actions + v3 approvals). */
+/** The session-database migration set (v1 sessions + v2 actions + v3 approvals + v4 api fields). */
 export function composedSessionMigrations() {
-  return [...SESSION_PERSISTENCE_MIGRATIONS, ...ACTION_MIGRATIONS, ...APPROVAL_MIGRATIONS]
+  return [...SESSION_PERSISTENCE_MIGRATIONS, ...ACTION_MIGRATIONS, ...APPROVAL_MIGRATIONS, SESSION_API_FIELDS_MIGRATION]
 }
 
 /** The documents-database migration set (v1 documents + v2 knowledge). */
@@ -286,6 +295,8 @@ export function createWorkBasePlugins(config: WorkBaseConfig): Plugin[] {
       },
       inject: ['documents', 'actions', 'approvals', 'knowledge', 'context', 'tools'],
     },
+    compositionPlugin,
+    clientFeaturesPlugin,
     {
       // The API surface (AC-3): Runtime Facade + HTTP/SSE server. The facade
       // is rooted so every mounted service resolves from its ctx.
@@ -302,6 +313,22 @@ export function createWorkBasePlugins(config: WorkBaseConfig): Plugin[] {
             const loaded = await root.sessionPersistence.load(SessionId(id))
             return { events: [...loaded.events] }
           },
+          // The API session list: durable rows + field upserts through the
+          // session persistence backend's api-side store.
+          persistence: {
+            listSessions: () => root.sessionPersistence.listApiSessions(),
+            saveApiFields: (id, fields) => root.sessionPersistence.setApiFields(SessionId(id), fields),
+          },
+          // Agent resume: delegate to the agent protocol over the persisted
+          // log, with the same bundle-level provider/model the factory uses.
+          resumeAgent: async (sessionId) => {
+            const rows = await root.sessionPersistence.listApiSessions()
+            if (!rows.some((row) => row.id === sessionId)) return undefined
+            return resumeAgentHandle(root, {
+              resumeSessionId: SessionId(sessionId),
+              agentOptions: { provider, model },
+            })
+          },
           checkDatabase: () => {
             const probe = new NodeSqliteDriver(sessionPath)
             try {
@@ -315,8 +342,17 @@ export function createWorkBasePlugins(config: WorkBaseConfig): Plugin[] {
           },
           modelValidator: (candidateProvider) => candidateProvider === provider,
         })
+        // Host-side session defaults: the settings surface edits these over
+        // the contributed route instead of the browser's localStorage.
+        mountSessionDefaults(root, config.dataDir)
         root.reflect.provide('facade', facade)
-        const api = createApiServer({ facade })
+        // Routes are resolved per request, so a plugin may contribute one
+        // before or after this plugin mounts.
+        const api = createApiServer({
+          facade,
+          routes: () => root.get('apiRoutes')?.list() ?? [],
+          ...(config.staticDir === undefined ? {} : { staticDir: config.staticDir }),
+        })
         // The boot only settles once the server listens (the smoke test
         // reads the bound port right after).
         await api.listen(config.port ?? 0)

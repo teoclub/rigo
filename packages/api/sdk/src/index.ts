@@ -83,6 +83,10 @@ export interface SessionSnapshot {
   title?: string
   eventCount: number
   lastSeq: number
+  /** Durable creation timestamp (populated through the persistence seam). */
+  createdAt?: string
+  /** Durable last-activity timestamp (populated through the persistence seam). */
+  updatedAt?: string
 }
 
 /** The result of one accepted message (SPEC §4.4: turn id + replay marker). */
@@ -125,6 +129,53 @@ export interface SessionLoader {
   (sessionId: string): { events: SessionEvent[]; cwd?: string } | undefined | Promise<{ events: SessionEvent[]; cwd?: string } | undefined>
 }
 
+/**
+ * One persisted session row as the persistence seam serves it (structurally
+ * the backend's ApiSessionRow — declared here so the facade adds no package
+ * dependency, following the loadSession/checkDatabase seam pattern).
+ */
+export interface FacadeSessionRow {
+  id: string
+  /** Durable status, for example `active` or `closed`. */
+  status: string
+  cwd?: string
+  providerId?: string
+  modelId?: string
+  title?: string
+  eventCount: number
+  lastSeq?: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** API presentation fields upserted through the persistence seam. */
+export interface FacadeApiFields {
+  providerId?: string
+  modelId?: string
+  title?: string
+}
+
+/**
+ * Persistence seam for the API session list (the host wires its backend):
+ * durable rows that {@link RuntimeFacade.listSessions} overlays with live
+ * sessions, and the field upserts that survive restarts.
+ */
+export interface FacadePersistence {
+  /** Durable rows for the session list, newest first. */
+  listSessions(): FacadeSessionRow[] | Promise<FacadeSessionRow[]>
+  /** Upsert API presentation fields for one session. */
+  saveApiFields(sessionId: string, fields: FacadeApiFields): void | Promise<void>
+}
+
+/**
+ * Agent resume seam: bring a persisted session's agent back live. Returns
+ * `undefined` when the session is not persisted. Hosts without agent resume
+ * leave it unwired and {@link RuntimeFacade.resumeSession} stays headless.
+ */
+export interface AgentResumeFactory {
+  (sessionId: string): FacadeAgentHandle | undefined | Promise<FacadeAgentHandle | undefined>
+}
+
 export interface RuntimeFacadeOptions {
   /** Agent factory; without it sessions are headless logs. */
   agentFactory?: AgentFactory
@@ -134,6 +185,10 @@ export interface RuntimeFacadeOptions {
   checkDatabase?: () => boolean | Promise<boolean>
   /** Provider/model existence check for session creation (host wires the LLM registry). */
   modelValidator?: (providerId: string, modelId: string) => boolean | Promise<boolean>
+  /** Persistence seam for the API session list (host wires its backend). */
+  persistence?: FacadePersistence
+  /** Agent resume seam (host wires the agent protocol's resume path). */
+  resumeAgent?: AgentResumeFactory
 }
 
 /** The shared runtime surface (SPEC §4.1). */
@@ -146,12 +201,16 @@ export class RuntimeFacade {
   private readonly loadSession: SessionLoader | undefined
   private readonly checkDatabase: (() => boolean | Promise<boolean>) | undefined
   private readonly modelValidator: ((providerId: string, modelId: string) => boolean | Promise<boolean>) | undefined
+  private readonly persistence: FacadePersistence | undefined
+  private readonly resumeAgent: AgentResumeFactory | undefined
 
   constructor(private readonly ctx: Context, options: RuntimeFacadeOptions = {}) {
     this.agentFactory = options.agentFactory
     this.loadSession = options.loadSession
     this.checkDatabase = options.checkDatabase
     this.modelValidator = options.modelValidator
+    this.persistence = options.persistence
+    this.resumeAgent = options.resumeAgent
   }
 
   /** Create a session (and its agent, when a factory is wired) (AC-1). */
@@ -181,6 +240,7 @@ export class RuntimeFacade {
         ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
         ...(input.title === undefined ? {} : { title: input.title }),
       })
+      await this.persistApiFields(session.id, input)
       return this.snapshot(session)
     }
     const session = this.ctx.sessions.create(undefined, {
@@ -191,6 +251,7 @@ export class RuntimeFacade {
       ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
       ...(input.title === undefined ? {} : { title: input.title }),
     })
+    await this.persistApiFields(session.id, input)
     return this.snapshot(session)
   }
 
@@ -232,15 +293,59 @@ export class RuntimeFacade {
     return { turnId: `turn_${randomUUID()}`, status: 'accepted' }
   }
 
+  /**
+   * The API session list: durable rows (through the persistence seam)
+   * overlaid with live sessions — live state is authoritative — most
+   * recently updated first. Without the seam only live sessions list.
+   */
+  async listSessions(): Promise<SessionSnapshot[]> {
+    const rows = this.persistence === undefined ? [] : await this.persistence.listSessions()
+    const rowById = new Map(rows.map((row) => [row.id, row]))
+    const entries: Array<{ snapshot: SessionSnapshot; updatedAt: string }> = []
+    const liveIds = new Set<string>()
+    for (const session of this.ctx.sessions.list()) {
+      liveIds.add(session.id)
+      const row = rowById.get(session.id)
+      const snapshot = this.snapshot(session, row)
+      // Live events past the durable watermark count as activity "now"; a
+      // live session at or below it keeps its durable timestamp.
+      const updatedAt = row !== undefined && snapshot.lastSeq <= (row.lastSeq ?? -1)
+        ? row.updatedAt
+        : new Date().toISOString()
+      entries.push({ snapshot, updatedAt })
+    }
+    for (const row of rows) {
+      if (liveIds.has(row.id)) continue
+      entries.push({ snapshot: this.rowSnapshot(row), updatedAt: row.updatedAt })
+    }
+    entries.sort((left, right) => (left.updatedAt < right.updatedAt ? 1 : left.updatedAt > right.updatedAt ? -1 : 0))
+    return entries.map((entry) => entry.snapshot)
+  }
+
   /** Resume a persisted session into the live store (AC-7: restore). */
   async resumeSession(sessionId: string): Promise<SessionSnapshot | undefined> {
+    if (this.ctx.sessions.get(SessionId(sessionId)) !== undefined) {
+      throw new SdkError('IDEMPOTENCY_CONFLICT', `session "${sessionId}" is already live`)
+    }
+    if (this.resumeAgent !== undefined) {
+      const handle = await this.resumeAgent(sessionId)
+      if (handle === undefined) return undefined
+      const id = SessionId(handle.agent.id)
+      const session = this.ctx.sessions.get(id)
+      if (session === undefined) {
+        // The seam's agent never published its session — release the handle
+        // rather than leak it.
+        await handle.dispose()
+        throw new SdkError('INTERNAL_ERROR', 'the resume seam did not publish a live session')
+      }
+      this.agents.set(id, handle)
+      await this.backfillMetadata(id)
+      return this.snapshot(session)
+    }
     if (this.loadSession === undefined) return undefined
     const loaded = await this.loadSession(sessionId)
     if (loaded === undefined) return undefined
     const id = SessionId(sessionId)
-    if (this.ctx.sessions.get(id) !== undefined) {
-      throw new SdkError('IDEMPOTENCY_CONFLICT', `session "${sessionId}" is already live`)
-    }
     const session = this.ctx.sessions.create(id, {
       seed: loaded.events,
       meta: {
@@ -358,20 +463,65 @@ export class RuntimeFacade {
     return this.requireAudit().project(session)
   }
 
-  private snapshot(session: Session): SessionSnapshot {
+  private snapshot(session: Session, row?: FacadeSessionRow): SessionSnapshot {
     const events = session.events
     const meta = this.metadata.get(session.id)
+    // In-memory metadata wins; the durable row backfills what a restart lost.
+    const providerId = meta?.providerId ?? row?.providerId
+    const modelId = meta?.modelId ?? row?.modelId
+    const title = meta?.title ?? row?.title
     return {
       sessionId: session.id,
       status: this.closed.has(session.id) ? 'closed' : 'active',
       agentStatus: this.agents.get(SessionId(session.id))?.agent.status ?? 'unavailable',
       ...(session.header.cwd === undefined ? {} : { cwd: session.header.cwd }),
-      ...(meta?.providerId === undefined ? {} : { providerId: meta.providerId }),
-      ...(meta?.modelId === undefined ? {} : { modelId: meta.modelId }),
-      ...(meta?.title === undefined ? {} : { title: meta.title }),
+      ...(providerId === undefined ? {} : { providerId }),
+      ...(modelId === undefined ? {} : { modelId }),
+      ...(title === undefined ? {} : { title }),
       eventCount: events.length,
       lastSeq: events.length === 0 ? -1 : events[events.length - 1]!.seq,
+      ...(row?.createdAt === undefined ? {} : { createdAt: row.createdAt }),
+      ...(row?.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
     }
+  }
+
+  /** A durable row projected as a (not-live) session snapshot. */
+  private rowSnapshot(row: FacadeSessionRow): SessionSnapshot {
+    return {
+      sessionId: row.id,
+      status: row.status === 'closed' ? 'closed' : 'active',
+      agentStatus: 'unavailable',
+      ...(row.cwd === undefined ? {} : { cwd: row.cwd }),
+      ...(row.providerId === undefined ? {} : { providerId: row.providerId }),
+      ...(row.modelId === undefined ? {} : { modelId: row.modelId }),
+      ...(row.title === undefined ? {} : { title: row.title }),
+      eventCount: row.eventCount,
+      lastSeq: row.lastSeq ?? -1,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }
+  }
+
+  /** Upsert the creation fields through the persistence seam, when wired. */
+  private async persistApiFields(id: SessionId, input: FacadeApiFields): Promise<void> {
+    if (this.persistence === undefined) return
+    await this.persistence.saveApiFields(id, {
+      ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
+      ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
+      ...(input.title === undefined ? {} : { title: input.title }),
+    })
+  }
+
+  /** Restore a restarted session's metadata from its durable row. */
+  private async backfillMetadata(id: SessionId): Promise<void> {
+    if (this.persistence === undefined || this.metadata.has(id)) return
+    const row = (await this.persistence.listSessions()).find((candidate) => candidate.id === id)
+    if (row === undefined) return
+    this.metadata.set(id, {
+      ...(row.providerId === undefined ? {} : { providerId: row.providerId }),
+      ...(row.modelId === undefined ? {} : { modelId: row.modelId }),
+      ...(row.title === undefined ? {} : { title: row.title }),
+    })
   }
 
   private requireApprovals(): { listPending(sessionId?: string): ApprovalRecord[]; get(id: string): ApprovalRecord | undefined; decide(id: string, decision: unknown): Promise<ApprovalResolveResult> } {
@@ -411,6 +561,10 @@ export class InProcessSdk {
 
   resumeSession(sessionId: string): Promise<SessionSnapshot | undefined> {
     return this.wrap(() => this.facade.resumeSession(sessionId))
+  }
+
+  listSessions(): Promise<SessionSnapshot[]> {
+    return this.wrap(() => this.facade.listSessions())
   }
 
   getSession(sessionId: string): SessionSnapshot | undefined {

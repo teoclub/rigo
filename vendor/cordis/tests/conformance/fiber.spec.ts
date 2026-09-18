@@ -163,14 +163,15 @@ describe('fiber', () => {
     await fiber.await()
     expect(configs).toEqual([{ a: 1, validated: true }])
 
-    const vetoedUpdate = fiber.update({ a: 2 })
-    expect(vetoedUpdate).toHaveProperty('then')
-    await vetoedUpdate
+    // `update()` returns nothing: the restart runs behind the waterfall, so
+    // the caller settles the fiber instead of awaiting an update promise.
+    expect(fiber.update({ a: 2 })).toBeUndefined()
     expect(vetoed).toBe(true)
     expect(configs).toHaveLength(1)
 
     disposeVeto()
-    await fiber.update({ a: 3 })
+    fiber.update({ a: 3 })
+    await fiber.await()
     expect(configs[1]).toEqual({ a: 3, validated: true })
 
     // invalid config fails validation
@@ -265,7 +266,7 @@ describe('fiber', () => {
     expect(ctx.fiber.state).toBe(S.ACTIVE)
   })
 
-  it('update() on a dependency-blocked PENDING fiber queues config and returns a promise', async () => {
+  it('update() on a dependency-blocked PENDING fiber queues config until injection', async () => {
     const ctx = new Context()
     const configs: any[] = []
     const fiber = ctx.plugin({
@@ -274,9 +275,7 @@ describe('fiber', () => {
     }, { value: 0 })
     expect(fiber.state).toBe(S.PENDING)
 
-    const result = fiber.update({ value: 1 })
-    expect(result).toHaveProperty('then')
-    await result
+    expect(fiber.update({ value: 1 })).toBeUndefined()
     expect(fiber.state).toBe(S.PENDING)
     expect(configs).toEqual([])
 

@@ -5,7 +5,7 @@ Disposal-aware timer service for Cordis.
 ## Usage
 
 ```ts
-import { Context } from '@teoclub/cordis'
+import { Context } from 'cordis'
 import Timer from '@teoclub/cordis-plugin-timer'
 
 const root = new Context()

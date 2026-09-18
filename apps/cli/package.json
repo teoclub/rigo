@@ -1,0 +1,15 @@
+{
+  "name": "@teoclub/rigo-cli",
+  "description": "Rigo agent harness CLI (Issue 039): the product entry — boots the minimal harness, serves the built web UI and the /api/v1 surface on one origin, and routes to a real OpenAI-compatible model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "rigo": "bin.js" },
+  "teoclub": { "origin": "local", "issue": "039" },
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "license": "MIT",
+  "dependencies": {
+    "@teoclub/harness-llm-openai-compatible": "*",
+    "@teoclub/work-base": "*"
+  }
+}

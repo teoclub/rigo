@@ -37,6 +37,12 @@
       "@teoclub/api-sdk/src/*": [
         "./packages/api/sdk/src/*"
       ],
+      "@teoclub/api-wire": [
+        "./packages/api/wire/src"
+      ],
+      "@teoclub/api-wire/src/*": [
+        "./packages/api/wire/src/*"
+      ],
       "@teoclub/code-context-repository": [
         "./packages/code/context-repository/src"
       ],
@@ -426,6 +432,12 @@
       ],
       "@teoclub/work-base": [
         "./packages/bundle/work-base/src"
+      ],
+      "@teoclub/work-base/client-composition": [
+        "./packages/bundle/work-base/src/client-composition.ts"
+      ],
+      "@teoclub/work-base/session-defaults": [
+        "./packages/bundle/work-base/src/session-defaults.ts"
       ],
       "@teoclub/work-base/src/*": [
         "./packages/bundle/work-base/src/*"
