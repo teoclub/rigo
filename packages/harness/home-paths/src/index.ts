@@ -1,7 +1,7 @@
 /**
  * Shared filesystem path helpers for DeepSeek Harness user data.
  *
- * @module @deepseek-ai/dsh-home-paths
+ * @module @teoclub/harness-home-paths
  */
 
 import { opendir, realpath } from 'node:fs/promises'
@@ -107,6 +107,17 @@ export function dshHomePath(...segments: string[]): string {
  * @param resolvedHome - the absolute path returned by {@link resolveDshHome}.
  * @returns `~/.dsh` for the default home, otherwise `$DSH_HOME`.
  */
+/**
+ * Join path segments onto the resolved Harness home's `cache` directory without creating it; no arguments returns the directory itself.
+ * @param optionsOrSegment - explicit home override, or the first path segment; omission uses the default home resolution.
+ * @param segments - additional path segments after the first child, if any.
+ * @returns the normalized absolute cache path.
+ */
+export function dshCachePath(optionsOrSegment: { dshHome?: string } | string = {}, ...segments: string[]): string {
+  if (typeof optionsOrSegment === 'string') return dshHomePath('cache', optionsOrSegment, ...segments)
+  return join(resolveDshHome(optionsOrSegment.dshHome), 'cache', ...segments)
+}
+
 export function dshHomeDisplay(resolvedHome: string): string {
   return resolvedHome === resolve(defaultDshHome()) ? DEFAULT_DSH_HOME_DISPLAY : `$${DSH_HOME_ENV}`
 }

@@ -34,7 +34,7 @@
  */
 
 import { Context, Service } from '@teoclub/cordis'
-import { KNOWN_SESSION_EVENT_TYPES, type Session } from '@teoclub/harness-session'
+import { KNOWN_SESSION_EVENT_TYPES, type Session, type SessionEvent } from '@teoclub/harness-session'
 
 // ---------------------------------------------------------------------------
 // Redaction (SPEC §7.4 field-level)
@@ -339,16 +339,22 @@ export class AuditService extends Service {
   /**
    * The UI projection for one session: one entry per logged fact, in seq
    * order (SPEC §3.7), each with its category and correlation id.
-   * @param session - the session to project.
+   *
+   * Takes the events rather than the Session: an audit view covers every
+   * committed fact, so it is a genuine full-history derivation and the caller
+   * supplies the log from a durable range read (`SessionPersistence.readFrom`)
+   * instead of the session's synchronous in-memory snapshot.
+   * @param sessionId - the session the entries belong to.
+   * @param events - the session's committed events, in seq order.
    * @returns the ordered audit entries.
    */
-  project(session: Session): AuditEntry[] {
-    return session.events.map((event) => {
+  project(sessionId: string, events: readonly SessionEvent[]): AuditEntry[] {
+    return events.map((event) => {
       const rule = PROJECTION_RULES[event.type]
       const data = event.data as Record<string, unknown>
       if (rule === undefined) {
         return {
-          sessionId: session.id,
+          sessionId,
           seq: event.seq,
           time: event.time,
           category: 'other',
@@ -358,7 +364,7 @@ export class AuditService extends Service {
         }
       }
       return {
-        sessionId: session.id,
+        sessionId,
         seq: event.seq,
         time: event.time,
         category: rule.category,
@@ -375,9 +381,16 @@ export class AuditService extends Service {
    * @param sessions - the sessions to project.
    * @returns the ordered audit entries.
    */
-  projectAll(sessions: readonly Session[]): AuditEntry[] {
-    return sessions
-      .flatMap((session) => this.project(session))
+  async projectAll(
+    sessions: readonly Session[],
+    read: (sessionId: string, fromSeq: number) => Promise<{ events: readonly SessionEvent[] } | undefined>,
+  ): Promise<AuditEntry[]> {
+    const perSession = await Promise.all(sessions.map(async (session) => {
+      const suffix = await read(session.id, 0)
+      return suffix === undefined ? [] : this.project(session.id, suffix.events)
+    }))
+    return perSession
+      .flat()
       .sort((left, right) => {
         const bySession = left.sessionId.localeCompare(right.sessionId)
         return bySession !== 0 ? bySession : left.seq - right.seq

@@ -22,8 +22,8 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "packages/llm/llm",
       "upstreamPackage": "@deepseek-ai/dsh-llm",
-      "upstreamVersion": "0.1.1-rc.2",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
+      "upstreamVersion": "0.1.6-alpha.1",
+      "commit": "0a15e36e7f82b6ed45af6fa9759f29b40dcd965d",
       "classification": "KEEP"
     }
   },
@@ -53,17 +53,24 @@
       "types": "./lib/types/message.d.ts",
       "default": "./lib/types/message.js"
     },
+    "./assistant-stream": {
+      "development": "./src/assistant-stream.ts",
+      "types": "./lib/types/assistant-stream.d.ts",
+      "default": "./lib/types/assistant-stream.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@teoclub/schemastery": "*"
-  },
-  "peerDependencies": {
-    "@teoclub/harness-attachment": "*",
-    "@teoclub/harness-invariants": "*",
+    "@teoclub/harness-protocol": "*",
+    "@teoclub/harness-crypto": "*",
+    "@teoclub/harness-values": "*",
+    "@teoclub/schemastery": "*",
     "@teoclub/harness-timeout": "*",
     "@teoclub/harness-brand": "*",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
     "@teoclub/cordis": "*"
   },
   "files": [

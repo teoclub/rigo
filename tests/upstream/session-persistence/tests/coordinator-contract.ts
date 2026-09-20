@@ -1,5 +1,5 @@
 import '../../../support/vitest-bun-polyfill.ts'
-import { createUserMessage } from '@teoclub/harness-llm'
+import { createToolResultMessage, createUserMessage, freezeMessage, MessageId, ToolCallId } from '@teoclub/harness-llm'
 /**
  * Shared write-path orchestration contract for backends using {@link PersistenceCoordinator}.
  * Unlike the public storage-semantics suite in `contract.ts`, it covers SessionStore event wiring,
@@ -16,6 +16,7 @@ import { Context, type Fiber } from '@teoclub/cordis'
 import { scopeTarget } from '@teoclub/harness-scope'
 import SessionStore, { SESSION_FORMAT_VERSION, Session, SessionId } from '@teoclub/harness-session'
 import type { SessionEvent } from '@teoclub/harness-session'
+import { SessionAlreadyExistsError } from '@teoclub/harness-session-persistence'
 import { meta, oneTurnLog, appendLog } from './contract.ts'
 
 /**
@@ -47,6 +48,24 @@ function send(session: Session, events: readonly SessionEvent[]): void {
 }
 
 /** A valid persisted log from immediately before messages gained wrappers and identities. */
+// Built once and reused at module scope: a surface replacement must differ from
+// the node it shadows in CONTENT alone, so the pruned result keeps this message
+// identity — and the assertions below read the same identity back.
+const fullResult = createToolResultMessage({
+  callId: ToolCallId('call-1'),
+  content: [{ type: 'text', text: 'full result' }],
+  isError: false,
+})
+const prunedResult = freezeMessage({
+  ...fullResult,
+  content: [{
+    type: 'tool-result',
+    toolCallId: ToolCallId('call-1'),
+    content: [{ type: 'text', text: 'pruned' }],
+    isError: false,
+  }],
+})
+
 function legacyMessageLog(): SessionEvent[] {
   return [
     { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
@@ -54,7 +73,7 @@ function legacyMessageLog(): SessionEvent[] {
       type: 'user/message',
       seq: 1,
       time: 2,
-      data: { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } },
+      data: freezeMessage({ id: MessageId('legacy-user'), role: 'user', content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } }),
       surfaceOp: 'append',
     },
     { type: 'step/start', seq: 2, time: 3, data: { turn: 1, step: 1 } },
@@ -62,11 +81,21 @@ function legacyMessageLog(): SessionEvent[] {
       type: 'assistant/message',
       seq: 3,
       time: 4,
+      // The 0.1.6 payload carries the settled `message` plus the packed attempt
+      // `stream`; the older `content`/`provenance` pair is no longer accepted.
       data: {
         turn: 1,
         step: 1,
-        content: [{ type: 'tool-call', id: 'call-1', name: 'read', arguments: '{}' }],
-        provenance: { provider: 'mock', model: 'mock' },
+        message: freezeMessage({
+          id: MessageId('legacy-assistant'),
+          role: 'assistant',
+          content: [{ type: 'tool-call', id: ToolCallId('call-1'), name: 'read', arguments: '{}' }],
+          source: { kind: 'model', provider: 'mock', model: 'mock' },
+        }),
+        stream: [
+          { type: 'chunk', time: 3, chunk: { type: 'block-start', index: 0, blockType: 'tool-call' } },
+          { type: 'chunk', time: 4, chunk: { type: 'finish', reason: { kind: 'tool-calls' } } },
+        ],
       },
       surfaceOp: 'append',
     },
@@ -80,12 +109,12 @@ function legacyMessageLog(): SessionEvent[] {
       type: 'tool/result',
       seq: 5,
       time: 6,
+      // 0.1.6 wraps the model-facing result in a `message`; the flat
+      // `callId`/`content`/`isError` shape is no longer accepted.
       data: {
         turn: 1,
         step: 1,
-        callId: 'call-1',
-        content: [{ type: 'text', text: 'full result' }],
-        isError: false,
+        message: fullResult,
       },
       sourceEventSeqs: [4],
       surfaceOp: 'append',
@@ -97,12 +126,10 @@ function legacyMessageLog(): SessionEvent[] {
       data: {
         turn: 1,
         step: 1,
-        callId: 'call-1',
-        content: [{ type: 'text', text: 'pruned' }],
-        isError: false,
+        message: prunedResult,
       },
       sourceEventSeqs: [5],
-      surfaceOp: { op: 'replace', start: 5, end: 5 },
+      surfaceOp: { op: 'replace', startSeq: 5, endSeq: 5 },
     },
     { type: 'step/end', seq: 7, time: 9, data: { turn: 1, step: 1 } },
     { type: 'turn/end', seq: 8, time: 10, data: { turn: 1, reason: { kind: 'completed' } } },
@@ -323,23 +350,34 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
-    it('round-trips the seed boundary (seedLength) through persistence', async () => {
-      // A forked child records how many leading events were inherited via the seed; the
-      // boundary must survive a reload (so a resume/replay can tell the inherited prefix from
-      // the child's own events). JSONL stores it in the header; SQLite uses `seed_length`.
+    it('round-trips the fork lineage marker through persistence', async () => {
+      // A forked child marks its lineage on the header (`isSeeded`); the marker
+      // must survive a reload so a resume can still tell a fork from a root
+      // session.
+      //
+      // The exact inherited prefix length is Session state rather than header
+      // metadata at the 0.1.6 baseline (`inheritedEventCount`), and this backend
+      // does not store it: no Rigo composition creates a seeded session, so the
+      // numeric cut is always 0 here and asserting a stored value would test a
+      // feature nothing produces.
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
         let session!: Session
         const sessionFiber = await ctx.plugin(Object.assign((inner: Context) => {
-          session = inner.sessions.create(SessionId('forked-child'), { meta: { cwd: WORK, seedLength: 3 } })
+          // The seeded constructor shape is only reachable through the store's
+          // own fork API: `isSeeded` requires an explicit constructor seed, and
+          // `fork` supplies the inherited prefix with it.
+          const parent = inner.sessions.create(SessionId('fork-parent'), { meta: { cwd: WORK } })
+          send(parent, oneTurnLog())
+          session = inner.sessions.fork(parent, undefined, SessionId('forked-child'))
         }, { inject: ['sessions'] }))
-        send(session, oneTurnLog())
         await ctx.sessions.flush(session)
         await sessionFiber.dispose()
 
         const loaded = await ctx.sessionPersistence.load(SessionId('forked-child'))
-        expect(loaded.meta.seedLength).toBe(3)
+        expect(loaded.meta.isSeeded).toBe(true)
+        expect(loaded.meta.parentSession).toBe('fork-parent')
       } finally {
         await fiber.dispose()
         await fix.cleanup()
@@ -443,19 +481,24 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
             else if (event.type === 'assistant/message'
               || event.type === 'tool/result') messages.push(event.data.message)
           }
+          // The loader preserves the identities the log carries. Synthesizing
+          // `legacy-message:<id>:<seq>` for a log that predates message
+          // identity moved into the dedicated `session-format-v0-to-v1`
+          // migration package at the 0.1.6 baseline, which this repo does not
+          // port: Rigo's own persistence has never written a pre-identity log.
           expect(messages.map(message => message.id)).toEqual([
-            `legacy-message:${id}:1`,
-            `legacy-message:${id}:3`,
-            `legacy-message:${id}:5`,
-            `legacy-message:${id}:5`,
+            'legacy-user',
+            'legacy-assistant',
+            fullResult.id,
+            fullResult.id,
           ])
           expect(messages.every(message => Object.isFrozen(message))).toBe(true)
 
           const resumed = Session.create(id, snapshot.events, snapshot.meta)
           expect(resumed.deriveMessages().map(message => message.id)).toEqual([
-            `legacy-message:${id}:1`,
-            `legacy-message:${id}:3`,
-            `legacy-message:${id}:5`,
+            'legacy-user',
+            'legacy-assistant',
+            fullResult.id,
           ])
         }
 
@@ -463,7 +506,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         expect(replacementSuffix.events[0]).toMatchObject({
           type: 'tool/result',
           seq: 6,
-          data: { message: { id: `legacy-message:${id}:5` } },
+          data: { message: { id: fullResult.id } },
         })
       } finally {
         await fiber.dispose()
@@ -1050,7 +1093,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         // Disposal is an observe-only notification. Poll storage rather than
         // assuming the owning fiber awaits the coordinator's detached drain.
         await vi.waitFor(async () => {
-          expect((await ctx.sessionPersistence.list()).map(meta => meta.id)).toContain(SessionId('buffered'))
+          expect((await ctx.sessionPersistence.list()).map(snapshot => snapshot.header.id)).toContain(SessionId('buffered'))
         })
         expect((await ctx.sessionPersistence.load(SessionId('buffered'))).events.map(event => event.seq)).toEqual([0, 1])
 
@@ -1281,9 +1324,17 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const { ctx, fiber } = await freshCtx(fix)
       try {
         const m = meta('empty-batch', WORK)
-        await ctx.sessionPersistence.create(m)
+        const creator = await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, [])
-        expect((await ctx.sessionPersistence.list()).map(h => h.id)).not.toContain(m.id)
+        // An empty batch is not a materialization. The identity stays reserved
+        // and empty on this instance — visible to stat/list/open with a zero
+        // length log, the lazy-create contract — and gains no durable artifact
+        // until something is actually appended (or flush is called).
+        expect((await ctx.sessionPersistence.list()).map(snapshot => snapshot.header.id)).toContain(m.id)
+        const reader = await ctx.sessionPersistence.open(m.id, 'read')
+        expect((await reader.read()).events).toEqual([])
+        await reader.close()
+        await creator.close()
       } finally {
         await fiber.dispose()
         await fix.cleanup()
@@ -1308,8 +1359,10 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       try {
         const m = meta('dup', WORK)
         await first.ctx.sessionPersistence.create(m)
-        // Same in-memory state.
-        await expect(Promise.resolve(first.ctx.sessionPersistence.create(m))).rejects.toThrow(/already exists in this backend/)
+        // Same in-memory state: an occupied id is a duplicate create, told
+        // apart from a storage failure by its error class rather than wording.
+        await expect(Promise.resolve(first.ctx.sessionPersistence.create(m)))
+          .rejects.toBeInstanceOf(SessionAlreadyExistsError)
         await first.ctx.sessionPersistence.append(m.id, oneTurnLog())
       } finally {
         await first.fiber.dispose()
@@ -1318,8 +1371,9 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       // A fresh instance over the same storage sees the persisted log.
       const second = await freshCtx(fix)
       try {
+        // The persisted-log case reports the same class: the id is taken.
         await expect(Promise.resolve(second.ctx.sessionPersistence.create(meta('dup', WORK))))
-          .rejects.toThrow(/already has a persisted log on disk/)
+          .rejects.toBeInstanceOf(SessionAlreadyExistsError)
       } finally {
         await second.fiber.dispose()
         await fix.cleanup()
@@ -1346,12 +1400,15 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
-        const m = { version: -1, id: SessionId('v-older'), createdAt: 1, cwd: WORK }
+        const m = { version: -1, id: SessionId('v-older'), createdAt: 1, cwd: WORK, isSeeded: false }
         await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, oneTurnLog())
         const failure = await ctx.sessionPersistence.load(m.id).then(() => undefined, (error: unknown) => error as Error)
         expect(failure?.name).toBe('SessionFormatUnsupportedError')
-        expect(failure?.message).toMatch(/older than the supported v0.*no upgrade path/)
+        // The refusal names the supported version, which the baseline moved to 3;
+        // build the expectation from the constant so a future bump cannot
+        // silently turn this into a version-archaeology test.
+        expect(failure?.message).toMatch(new RegExp(`older than the supported v${SESSION_FORMAT_VERSION}.*no upgrade path`))
       } finally {
         await fiber.dispose()
         await fix.cleanup()
@@ -1390,7 +1447,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
-        const m = { version: SESSION_FORMAT_VERSION, id: SessionId('forked-child'), createdAt: 1, cwd: WORK, parentSession: SessionId('the-parent') }
+        const m = { version: SESSION_FORMAT_VERSION, id: SessionId('forked-child'), createdAt: 1, cwd: WORK, parentSession: SessionId('the-parent'), isSeeded: false }
         await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, oneTurnLog())
         const loaded = await ctx.sessionPersistence.load(m.id)

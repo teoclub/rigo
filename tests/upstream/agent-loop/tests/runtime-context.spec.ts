@@ -4,7 +4,7 @@ import { createUserMessage } from '@teoclub/harness-llm'
 import SessionStore, { SessionId } from '@teoclub/harness-session'
 import { RuntimeContextProjection } from '@teoclub/harness-agent-loop/src/runtime-context.ts'
 
-const SOURCE = '@deepseek-ai/dsh-system-prompt'
+const SOURCE = '@teoclub/harness-system-prompt'
 
 function contextMessage(text: string) {
   return createUserMessage({
@@ -24,7 +24,7 @@ describe('RuntimeContextProjection', () => {
       content: [{ type: 'text', text: 'summary' }],
       source: { kind: 'plugin', plugin: 'test-compaction' },
     }), {
-      surfaceOp: { op: 'replace', start: shadowed.seq, end: shadowed.seq },
+      surfaceOp: { op: 'replace', startSeq: shadowed.seq, endSeq: shadowed.seq },
       sourceEventSeqs: [shadowed.seq],
     })
 

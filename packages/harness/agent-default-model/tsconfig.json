@@ -12,9 +12,6 @@
       "path": "../agent"
     },
     {
-      "path": "../invariants"
-    },
-    {
       "path": "../llm"
     },
     {

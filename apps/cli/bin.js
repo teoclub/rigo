@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-transform-types --conditions=development
+#!/usr/bin/env -S node --experimental-transform-types
 /**
  * The `rigo` executable.
  *
@@ -6,11 +6,13 @@
  * so it can be imported without a side effect, and the only thing this file
  * does that a test cannot is set the exit code.
  *
- * The shebang carries `--experimental-transform-types --conditions=development`
- * so the CLI runs the workspace's TypeScript sources directly — the same two
- * flags `bun run dev` uses. That also means workspace packages resolve through
- * their `development` export condition (source, not built `lib`), so an
- * in-repo `rigo` never runs against a stale build.
+ * The shebang carries `--experimental-transform-types` for THIS file's own
+ * import of `./src/index.ts`, and deliberately NOT `--conditions=development`:
+ * the default condition resolves workspace packages to their built `lib/`, so
+ * `rigo` runs the same artifacts a release ships. Running the sources instead
+ * would need a loader that understands decorators (`@teoclub/harness-llm`
+ * carries `@Remote`) — Node's transform does not — which is why `bun run dev`
+ * goes through tsx for that mode.
  */
 import { run } from './src/index.ts'
 

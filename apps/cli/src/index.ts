@@ -20,6 +20,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MockAdapter, textResponse } from '@teoclub/harness-llm-mock'
 import { bootWorkBase } from '@teoclub/work-base'
 import { OpenAICompatibleAdapter } from '@teoclub/harness-llm-openai-compatible'
 
@@ -122,9 +123,14 @@ export function planCli(
   let model: string
   let route: string
   if (useMock) {
-    // The mock adapter lives in the bundle and is selected by the provider id
-    // alone, so nothing is registered here — naming the route is the whole job.
+    // The bundle ships no adapter of its own, so the mock route must be
+    // REGISTERED here. Leaving it implicit boots a server that reports
+    // `model mock` and then fails every turn with NO_ADAPTER.
     model = env.RIGO_LLM_MODEL ?? 'mock'
+    adapters[provider] = new MockAdapter([textResponse(
+      'Rigo is running on the deterministic mock model. Set RIGO_LLM_BASE_URL '
+      + '(and RIGO_LLM_API_KEY) to answer with a real provider.',
+    )])
     route = 'mock (deterministic; set RIGO_LLM_BASE_URL for a real model)'
   } else {
     // No invented default: there is no model id that means "whatever the

@@ -5,10 +5,10 @@ import {
   valueSchemaSpecToJsonSchema,
   type InferArgs,
   type InferValue,
-  type JsonValue,
   type ParameterSchemaSpec,
   type ValueSchemaSpec,
 } from '@teoclub/harness-tools'
+import type { JsonValue } from '@teoclub/harness-values'
 
 describe('the unified author schema DSL', () => {
   it('compiles every value root and the author-only json node', () => {

@@ -97,7 +97,12 @@ export function StreamingMessage(props: { view: StreamViewModel }): JSX.Element 
       {view.assistantText.length === 0
         ? (
           <p className="assistant-empty" data-testid="assistantEmpty">
-            {streaming ? 'Thinking…' : 'Waiting for the assistant…'}
+            {/* A failed turn produced no text, so "Waiting for the assistant…"
+                would be a lie: say what went wrong instead of leaving the
+                transcript looking like a silent model. */}
+            {view.turnError === undefined
+              ? (streaming ? 'Thinking…' : 'Waiting for the assistant…')
+              : 'The turn failed.'}
           </p>
         )
         : (
@@ -106,6 +111,15 @@ export function StreamingMessage(props: { view: StreamViewModel }): JSX.Element 
             {streaming && <span className="caret" aria-hidden="true" />}
           </>
         )}
+      {view.turnError !== undefined && (
+        <p role="alert" data-testid="turnError" className="alert turn-error">
+          <span className="alert-icon"><Icon path={ICONS.alert} size={14} /></span>
+          <span>
+            {view.turnError.message}
+            {view.turnError.code !== undefined && <span className="turn-error-code"> ({view.turnError.code})</span>}
+          </span>
+        </p>
+      )}
     </div>
   )
 }

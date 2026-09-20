@@ -1,10 +1,10 @@
-/** Package-owned LLM stream-protocol invariants. @module @deepseek-ai/dsh-llm/invariant */
+/** Package-owned LLM stream-protocol invariants. @module @teoclub/harness-llm/invariant */
 
 import type { Context } from '@teoclub/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@teoclub/harness-invariants'
 import type { ContentBlockType, StreamChunk } from './types.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-llm'
+const PACKAGE_NAME = '@teoclub/harness-llm'
 
 /** Cordis companion plugin name. */
 export const name = 'llm-invariant'

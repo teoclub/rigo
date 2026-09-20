@@ -3,7 +3,7 @@
  * per-namespace sections; plugins register a namespace schema and read the
  * resolved value, which layers schema defaults, the registrant's composition
  * `base`, and the user document section, in that order.
- * @module @deepseek-ai/dsh-settings
+ * @module @teoclub/harness-settings
  */
 
 import { Context, Service } from '@teoclub/cordis'
@@ -433,6 +433,10 @@ export abstract class SettingsProvider extends Service {
    * @returns the owner scope for reads, observation, and updates.
    */
   register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T> {
+    // The brand is compile-time only, so a caller reaching the service with an
+    // unvalidated string (a plain JS host, a config document) must still be
+    // refused here — the pin validates at every entry point for the same reason.
+    ns = settingsNamespace(ns)
     if (this.registrations.has(ns)) {
       throw new Error(`settings namespace "${ns}" is already registered`)
     }
@@ -467,6 +471,45 @@ export abstract class SettingsProvider extends Service {
       update: patch => this.update(ns, patch),
       replace: section => this.replace(ns, section),
     }
+  }
+
+  /**
+   * Attach one optional-settings consumer to this provider. The consumer
+   * registers its composition entry as the base layer while this provider is
+   * present, then falls back to that entry if the provider detaches.
+   *
+   * This is the 0.1.6 baseline's provider-side counterpart to the standalone
+   * {@link installSettingsSection}: both drive `register`, but a consumer that
+   * already holds the provider (every ported core package does) calls this
+   * directly instead of injecting the service first.
+   * @param owner - consumer context whose unload suppresses fallback work.
+   * @param ns - consumer-owned settings namespace.
+   * @param schema - schema resolving the namespace.
+   * @param entry - composition entry used as the base and fallback value.
+   * @param hooks - source sink, change notification, and optional validation.
+   */
+  installSection<T>(
+    owner: Context,
+    ns: SettingsNamespace,
+    schema: z<T>,
+    entry: T,
+    hooks: SettingsSectionHooks<T>,
+  ): void {
+    const scope = this.register<T>(ns, schema, {
+      base: entry,
+      ...hooks.validate === undefined ? {} : { validate: hooks.validate },
+    })
+    hooks.setSource(() => scope.get())
+    this.ctx.effect(() => () => {
+      if (isUnloading(owner)) return
+      hooks.setSource(() => entry)
+      hooks.onChange()
+    })
+    hooks.onChange()
+    scope.watch(() => {
+      if (isUnloading(owner)) return
+      hooks.onChange()
+    })
   }
 
   /**

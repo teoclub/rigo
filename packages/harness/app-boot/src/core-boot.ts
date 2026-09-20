@@ -27,6 +27,7 @@
 import { Context, FiberState, type Plugin } from '@teoclub/cordis'
 import AgentRegistry from '@teoclub/harness-agent'
 import AgentLoop, { type Config as AgentLoopConfig } from '@teoclub/harness-agent-loop'
+import { SessionProjectionRegistry } from '@teoclub/harness-session-projection'
 import LlmRuntime, { type LlmAdapter } from '@teoclub/harness-llm'
 import SessionStore from '@teoclub/harness-session'
 import SystemPrompt from '@teoclub/harness-system-prompt'
@@ -39,11 +40,15 @@ export const CORE_PLUGINS = [
   SystemPrompt,
   ToolRuntime,
   AgentRegistry,
+  // The projection registry mounts before AgentLoop: the 0.1.6 loop declares
+  // `sessionProjections` as a REQUIRED injection (the mandatory projection
+  // seam), so booting without it leaves the loop inactive.
+  SessionProjectionRegistry,
   AgentLoop,
 ] as const
 
 /** Every core service key the minimal boot guarantees to provide. */
-export const CORE_SERVICE_KEYS = ['llm', 'sessions', 'systemPrompt', 'tools', 'agents', 'agentLoop'] as const
+export const CORE_SERVICE_KEYS = ['llm', 'sessions', 'systemPrompt', 'tools', 'agents', 'sessionProjections', 'agentLoop'] as const
 
 export interface CoreBootOptions {
   /** Agent-loop configuration; defaults to an empty declarative-agent list. */

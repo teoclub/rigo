@@ -11,10 +11,17 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   workspace: {
     include: [
-      // Issue 003: minimal empty-package closure lives under these roots;
-      // each later phase adds its packages here.
+      // Every root the workspace declares a package under. A root missing
+      // here is not merely unbundled: its packages still publish
+      // `exports.default = ./lib/index.js`, so the default condition resolves
+      // to a file nothing produces (or to a leftover from the last time it
+      // was listed) while `bun run build` still reports success.
       'packages/harness/*',
       'packages/shared/*',
+      'packages/work/*',
+      'packages/code/*',
+      'packages/api/*',
+      'packages/bundle/*',
     ],
   },
   entry: ['lib/types/index.js'],

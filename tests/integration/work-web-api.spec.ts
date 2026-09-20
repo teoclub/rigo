@@ -14,6 +14,19 @@ import { RuntimeFacade } from '@teoclub/api-sdk'
 import { createApiServer, type ApiServer } from '@teoclub/api-http'
 import { WorkApiClient, ApiError, sseReconnectDelay } from '../../apps/work-web/src/api.ts'
 
+/** Wire the facade's durable history reader to this harness's persistence. */
+function durableReader(ctx: Context) {
+  return async (id: string, fromSeq: number): Promise<{ events: readonly never[] } | undefined> => {
+    try {
+      const suffix = await ctx.sessionPersistence.readFromDurable(SessionId(id), fromSeq)
+      return { events: [...suffix.events] as readonly never[] }
+    } catch {
+      return undefined
+    }
+  }
+}
+
+
 const isBun = typeof Bun !== 'undefined'
 
 function makeFakeAgent(session: Session): { agent: PublicAgent; dispose(): Promise<void> } {
@@ -42,7 +55,7 @@ const openServers: { api: ApiServer; ctx: Context }[] = []
 async function liveServer(): Promise<{ base: string; ctx: Context; sessionId: string; client: WorkApiClient }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  const facade = new RuntimeFacade(ctx, {
+  const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
     agentFactory: (input) => {
       const session = ctx.sessions.create(undefined, {
         ...(input.cwd === undefined ? {} : { meta: { cwd: input.cwd } }),
@@ -260,7 +273,7 @@ describe.skipIf(isBun)('work web approval/audit api client (Node)', async () => 
       ...m().APPROVAL_MIGRATIONS,
     ] })
     const ctx = new Context()
-    const api = createApiServer({ facade: new RuntimeFacade(ctx) })
+    const api = createApiServer({ facade: new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx), readSessionFrom: durableReader(ctx) }) })
     try {
       await ctx.plugin(SessionStore)
       await ctx.plugin(m().SqliteSessionPersistence as never, { path, migrations: [
@@ -316,7 +329,7 @@ describe.skipIf(isBun)('work web approval/audit api client (Node)', async () => 
         .rejects.toMatchObject({ code: 'APPROVAL_ALREADY_DECIDED' })
       // AC-7: the audit timeline is ordered by seq with categories.
       const entries = await client.auditProjection('session_web')
-      expect(entries.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+      expect(entries.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
       expect(entries.some((entry) => entry.category === 'approval')).toBe(true)
       expect(entries.some((entry) => entry.category === 'turn')).toBe(true)
     } finally {

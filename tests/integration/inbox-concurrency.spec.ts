@@ -32,13 +32,13 @@ describe('Rigo inbox/concurrency/abort semantics (Issue 015)', () => {
       // One turn per wake, in send order, each claiming exactly one message.
       expect(turns).toHaveLength(3)
       expect(turns.map((turn) => turn.userMessages)).toEqual([1, 1, 1])
-      const userTexts = session.events.filter((event) => event.type === 'user/message')
+      const userTexts = session.snapshotEvents().filter((event) => event.type === 'user/message')
         .map((event) => (event.type === 'user/message' ? event.data.content[0] : null))
         .filter((block): block is { type: 'text'; text: string } => block?.type === 'text')
         .map((block) => block.text)
       expect(userTexts).toEqual(['first', 'second', 'third'])
       // Turns are strictly sequential in the log.
-      const turnBoundaries = session.events.filter((event) => event.type === 'turn/start' || event.type === 'turn/end')
+      const turnBoundaries = session.snapshotEvents().filter((event) => event.type === 'turn/start' || event.type === 'turn/end')
       expect(turnBoundaries.map((event) => event.type)).toEqual([
         'turn/start', 'turn/end', 'turn/start', 'turn/end', 'turn/start', 'turn/end',
       ])
@@ -84,10 +84,10 @@ describe('Rigo inbox/concurrency/abort semantics (Issue 015)', () => {
       created.agent.abort({ kind: 'user' }) // default: queued work discarded
       await created.agent.whenIdle()
       // Only the aborted first message was claimed; the queue was discarded.
-      const userMessages = session.events.filter((event) => event.type === 'user/message')
+      const userMessages = session.snapshotEvents().filter((event) => event.type === 'user/message')
       expect(userMessages).toHaveLength(1)
       expect(created.agent.status).toBe('idle')
-      expect(session.events.at(-1)).toMatchObject({ type: 'turn/end' })
+      expect(session.snapshotEvents().at(-1)).toMatchObject({ type: 'turn/end' })
       await created.dispose()
     } finally {
       await handle.dispose()
@@ -118,7 +118,7 @@ describe('Rigo inbox/concurrency/abort semantics (Issue 015)', () => {
       // A later wake drains the preserved queue in order.
       created.agent.send('wake')
       await created.agent.whenIdle()
-      const userTexts = session.events.filter((event) => event.type === 'user/message')
+      const userTexts = session.snapshotEvents().filter((event) => event.type === 'user/message')
         .map((event) => (event.type === 'user/message' ? event.data.content[0] : null))
         .filter((block): block is { type: 'text'; text: string } => block?.type === 'text')
         .map((block) => block.text)
@@ -150,7 +150,7 @@ describe('Rigo inbox/concurrency/abort semantics (Issue 015)', () => {
       await created.agent.whenIdle()
 
       // Exactly two turns: the aborted one and the latched wake, executed once.
-      const userTexts = session.events.filter((event) => event.type === 'user/message')
+      const userTexts = session.snapshotEvents().filter((event) => event.type === 'user/message')
         .map((event) => (event.type === 'user/message' ? event.data.content[0] : null))
         .filter((block): block is { type: 'text'; text: string } => block?.type === 'text')
         .map((block) => block.text)

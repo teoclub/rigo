@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@teoclub/cordis'
-import { CallId } from '@teoclub/harness-llm'
+import { ToolCallId } from '@teoclub/harness-llm'
 import { Session, SessionId, SESSION_FORMAT_VERSION } from '@teoclub/harness-session'
 
 type NodeSqliteDriver = import('@teoclub/shared-storage-sqlite-node/node').NodeSqliteDriver
@@ -93,6 +93,8 @@ describe.skipIf(typeof Bun !== 'undefined')('document read/write tools (Node)', 
       version: SESSION_FORMAT_VERSION,
       id: SessionId(id),
       createdAt: Date.now(),
+      // Required since the 0.1.6 baseline.
+      isSeeded: false,
       ...(cwd === undefined ? {} : { cwd }),
     })
   }
@@ -146,7 +148,7 @@ describe.skipIf(typeof Bun !== 'undefined')('document read/write tools (Node)', 
 
   async function runTool(ctx: Context, name: string, args: unknown): Promise<{ content: unknown[]; isError: boolean }> {
     const result = await ctx.tools.execute({
-      callId: CallId(`call-${Math.random().toString(36).slice(2)}`),
+      callId: ToolCallId(`call-${Math.random().toString(36).slice(2)}`),
       name,
       arguments: args,
       signal: new AbortController().signal,

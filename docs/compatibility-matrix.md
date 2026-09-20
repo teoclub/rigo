@@ -9,12 +9,15 @@
 The migration intentionally deviates from upstream in the following ways (SPEC §2.3, PRD):
 
 - **REPLACE** `@deepseek-ai/dsh-base` (`packages/bundle/base`) — Replaced by the new @teoclub/work-base bundle (Rigo Work product composition).
-- **REPLACE** `Coding packages (shell, lsp, sandbox, terminal, code-runtime backends)` (`packages/shell, packages/lsp, packages/sandbox, packages/terminal`) — Replaced by the minimal Rigo Code bundle (repository context + workspace file read/write) per PRD D-002.
+- **REPLACE** `Coding packages (shell, lsp, terminal, sandbox enforcement backends)` (`packages/shell, packages/lsp, packages/terminal`) — Replaced by the minimal Rigo Code bundle (repository context + workspace file read/write) per PRD D-002. The sandbox family was carved out of this row at the 0.1.6 baseline: upstream tools now imports @deepseek-ai/dsh-sandbox at runtime (the escalation vocabulary), so sandbox/sandbox (the contract and escalation vocabulary) and sandbox/sandbox-policy joined the KEEP closure. The enforcement backends (sandbox-local, sandbox-windows-acl) stay out: they cascade into further upstream packages and native dependencies (koffi, a Linux-only Landlock addon) and no Rigo bundle mounts them.
 - **DROP** `@deepseek-ai/dsh-session-persistence-jsonl` (`packages/session/session-persistence-jsonl`) — PRD D-003: SQLite is the only official session persistence provider; JSONL provider dropped.
 - **REPLACE** `@deepseek-ai/dsh-llm-deepseek` (`packages/llm/deepseek`) — Replaced by the OpenAI-compatible provider (@teoclub/harness-llm-openai-compatible) and the CI mock provider.
 - **REPLACE** `Host / Client / Web / SDK product surface` (`packages/host, packages/client, packages/web, packages/sdk`) — Replaced by the lean React/Vite Rigo Work UI, HTTP/SSE host and in-process SDK (PRD D-006/D-007).
 
 ADAPT packages carry recorded local modifications (reason in the manifest):
+- **ADAPT** `@teoclub/harness-agent-default-model` — Adapted: the Rigo settings provider takes a branded SettingsNamespace, so the namespace constant is minted through settingsNamespace(...) rather than by upstream type-level inference.
+- **ADAPT** `@teoclub/harness-agent-loop` — Adapted: the Rigo settings provider takes a branded SettingsNamespace, so the namespace constant is minted through settingsNamespace(...) rather than by upstream type-level inference.
+- **ADAPT** `@teoclub/harness-session-persistence` — SPEC §2.3: persistence coordinator seam implemented by the SQLite provider. Local addition (Issue 039): ApiSessionFields/ApiSessionRow and the no-op setApiFields default, so the API session list can persist provider/model/title beside the event-sourced log.
 - **ADAPT** `@teoclub/harness-settings` — SPEC §2.3: minimal subset - service definition only, no file provider.
 - **ADAPT** `@teoclub/harness-home-paths` — Adapted: DSH_HOME environment/home layout becomes the Rigo harness home.
 - **ADAPT** `@teoclub/harness-launch-environment` — Adapted: DSH_* launch variables become RIGO_* variables.
@@ -41,7 +44,7 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream package | Upstream path | Local path | Classification |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-agent-default-model` | `packages/core/agent-default-model` | `packages/harness/agent-default-model` | `KEEP` |
+| `@deepseek-ai/dsh-agent-default-model` | `packages/core/agent-default-model` | `packages/harness/agent-default-model` | `ADAPT` |
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
@@ -51,7 +54,7 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream package | Upstream path | Local path | Classification |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-agent-loop` | `packages/core/agent-loop` | `packages/harness/agent-loop` | `KEEP` |
+| `@deepseek-ai/dsh-agent-loop` | `packages/core/agent-loop` | `packages/harness/agent-loop` | `ADAPT` |
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
@@ -61,20 +64,26 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/core/agent-loop/tests/config-session-id.spec.ts` | `config-session-id.spec.ts` | `tests/upstream/agent-loop/tests/config-session-id.spec.ts` | `adapted` | uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo's only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test |
 | `packages/core/agent-loop/tests/contract-regressions.spec.ts` | `contract-regressions.spec.ts` | `tests/upstream/agent-loop/tests/contract-regressions.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/coverage-edges.spec.ts` | `coverage-edges.spec.ts` | `tests/upstream/agent-loop/tests/coverage-edges.spec.ts` | `unchanged` | — |
+| `packages/core/agent-loop/tests/inbox.spec.ts` | `inbox.spec.ts` | `tests/upstream/agent-loop/tests/inbox.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/interception.spec.ts` | `interception.spec.ts` | `tests/upstream/agent-loop/tests/interception.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/invariant.spec.ts` | `invariant.spec.ts` | `tests/upstream/agent-loop/tests/invariant.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/loop.spec.ts` | `loop.spec.ts` | `tests/upstream/agent-loop/tests/loop.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/mock-adapter.ts` | `mock-adapter.ts` | `tests/upstream/agent-loop/tests/mock-adapter.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/properties.spec.ts` | `properties.spec.ts` | `tests/upstream/agent-loop/tests/properties.spec.ts` | `unchanged` | — |
-| `packages/core/agent-loop/tests/request-cache.e2e.ts` | `request-cache.e2e.ts` | `tests/upstream/agent-loop/tests/request-cache.e2e.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/request-error.spec.ts` | `request-error.spec.ts` | `tests/upstream/agent-loop/tests/request-error.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/request-reconstruction.spec.ts` | `request-reconstruction.spec.ts` | `tests/upstream/agent-loop/tests/request-reconstruction.spec.ts` | `unchanged` | — |
-| `packages/core/agent-loop/tests/resume.spec.ts` | `resume.spec.ts` | `tests/upstream/agent-loop/tests/resume.spec.ts` | `adapted` | uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo's only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test bun's expect().rejects/.resolves evaluate the subject promise EAGERLY (blocking the test), so the vitest pattern of registering a rejection assertion and then triggering the rejection deadlocks under bun; the lazy then-form settles identically in both runtimes and asserts the same rejection message |
+| `packages/core/agent-loop/tests/resume.spec.ts` | `resume.spec.ts` | `tests/upstream/agent-loop/tests/resume.spec.ts` | `adapted` | uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo's only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test three cases assert the dropped JSONL provider's OWN physical internals, not the persistence seam: two reach into its `tracker.openHandles` set to swap a live handle's `close`, and one tears the on-disk `.jsonl` artifact to build a corrupt tail. Rigo ships SQLite and the in-memory double, neither of which has a per-session handle registry or a torn JSONL line to manufacture — the coordinator contract already documents the same limit for memory stores (`expect(fix.corruptTail).toBeUndefined()`), so these are skipped rather than silently passing bun's expect().rejects/.resolves evaluate the subject promise EAGERLY (blocking the test), so the vitest pattern of registering a rejection assertion and then triggering the rejection deadlocks under bun; the lazy then-form settles identically in both runtimes and asserts the same rejection message |
 | `packages/core/agent-loop/tests/runtime-context.spec.ts` | `runtime-context.spec.ts` | `tests/upstream/agent-loop/tests/runtime-context.spec.ts` | `unchanged` | — |
-| `packages/core/agent-loop/tests/scope-lifecycle.spec.ts` | `scope-lifecycle.spec.ts` | `tests/upstream/agent-loop/tests/scope-lifecycle.spec.ts` | `unchanged` | — |
+| `packages/core/agent-loop/tests/scope-lifecycle.spec.ts` | `scope-lifecycle.spec.ts` | `tests/upstream/agent-loop/tests/scope-lifecycle.spec.ts` | `adapted` | bun's expect().rejects evaluates the subject promise EAGERLY, so the register-then-trigger shape (hold the assertion, await it after the trigger) deadlocks the whole run — bun never returns from the assertion to fire the trigger, and the process spins instead of failing. The lazy then-form settles identically in both runtimes and asserts the same message |
 | `packages/core/agent-loop/tests/settings.spec.ts` | `settings.spec.ts` | `tests/upstream/agent-loop/tests/settings.spec.ts` | `unchanged` | — |
+| `packages/core/agent-loop/tests/system-prompt-projection.spec.ts` | `system-prompt-projection.spec.ts` | `tests/upstream/agent-loop/tests/system-prompt-projection.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/tool-calls.spec.ts` | `tool-calls.spec.ts` | `tests/upstream/agent-loop/tests/tool-calls.spec.ts` | `unchanged` | — |
 | `packages/core/agent-loop/tests/tool-order.spec.ts` | `tool-order.spec.ts` | `tests/upstream/agent-loop/tests/tool-order.spec.ts` | `unchanged` | — |
+| `packages/core/agent-loop/tests/system-prompt-admission.spec.ts` | `system-prompt-admission.spec.ts` | — | `intentionally omitted` | imports @deepseek-ai/dsh-llm-pi-ai, a provider outside the migration closure |
+| `packages/core/agent-loop/tests/serial-listener-review.spec.ts` | `serial-listener-review.spec.ts` | — | `intentionally omitted` | imports the agent-loop testkit, jsonl persistence and the subagent family — none ported |
+| `packages/core/agent-loop/tests/request-cache.e2e.ts` | `request-cache.e2e.ts` | — | `intentionally omitted` | imports @deepseek-ai/dsh-llm-deepseek, replaced by the OpenAI-compatible provider (PRD D-003/D-004) |
+| `packages/core/agent-loop/tests/request-freeze.spec.ts` | `request-freeze.spec.ts` | — | `intentionally omitted` | imports the agent-loop testkit, which is not ported |
+| `packages/core/agent-loop/tests/shutdown-drain.spec.ts` | `shutdown-drain.spec.ts` | — | `intentionally omitted` | imports the dropped jsonl persistence provider (PRD D-003) |
 
 ### @teoclub/harness-agent-tool-presentation
 
@@ -97,10 +106,24 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/boot/app-boot/tests/app-boot.spec.ts` | `app-boot.spec.ts` | `tests/upstream/app-boot/tests/app-boot.spec.ts` | `adapted` | reverted Loader: fail-loud diagnostics now come from assertEntriesActivated, which labels each row with its entry id and specifier |
 | `packages/boot/app-boot/tests/config-dump.spec.ts` | `config-dump.spec.ts` | `tests/upstream/app-boot/tests/config-dump.spec.ts` | `unchanged` | — |
 | `packages/boot/app-boot/tests/config-reload.spec.ts` | `config-reload.spec.ts` | `tests/upstream/app-boot/tests/config-reload.spec.ts` | `adapted` | reverted Loader (upstream PR #932): pins eager non-transactional containment instead of rollback; Node-only cases documented as a runtime diff |
+| `packages/boot/app-boot/tests/loader-shape.compat.spec.ts` | `loader-shape.compat.spec.ts` | `tests/upstream/app-boot/tests/loader-shape.compat.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/profile-resolution-service.spec.ts` | `profile-resolution-service.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution-service.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/profile-resolution-worker-bootstrap.spec.ts` | `profile-resolution-worker-bootstrap.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution-worker-bootstrap.spec.ts` | `adapted` | hand-maintained: the test reaches the package source through its public `src/*` export instead of upstream's in-package `../src/` path, which does not exist in the mirrored tests/upstream layout |
+| `packages/boot/app-boot/tests/profile-resolution.spec.ts` | `profile-resolution.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution.spec.ts` | `unchanged` | — |
 | `packages/boot/app-boot/tests/profile.spec.ts` | `profile.spec.ts` | `tests/upstream/app-boot/tests/profile.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/user-patches.spec.ts` | `user-patches.spec.ts` | `tests/upstream/app-boot/tests/user-patches.spec.ts` | `adapted` | reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr/config-update-failed |
-| `packages/boot/app-boot/tests/watch-config.spec.ts` | `watch-config.spec.ts` | `tests/upstream/app-boot/tests/watch-config.spec.ts` | `adapted` | local addition: ported from the newer upstream pin, where the transactional HMR revert moved exact config watching into app boot |
-| `packages/boot/app-boot/tests/hmr-config.spec.ts` | `hmr-config.spec.ts` | — | `intentionally omitted` | covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/watch-config.spec.ts supersedes it |
+| `packages/boot/app-boot/tests/user-patches.spec.ts` | `user-patches.spec.ts` | `tests/upstream/app-boot/tests/user-patches.spec.ts` | `adapted` | reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr-config-update-failed |
+| `packages/boot/app-boot/tests/watch-config.spec.ts` | `watch-config.spec.ts` | `tests/upstream/app-boot/tests/watch-config.spec.ts` | `unchanged` | — |
+| `packages/boot/app-boot/tests/hmr-config.spec.ts` | `hmr-config.spec.ts` | — | `intentionally omitted` | covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/upstream/app-boot/tests/watch-config.spec.ts supersedes it |
+
+### @teoclub/harness-atomic-write
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-atomic-write` | `packages/util/atomic-write` | `packages/harness/atomic-write` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/util/atomic-write/tests/atomic-write.spec.ts` | `atomic-write.spec.ts` | `tests/upstream/atomic-write/tests/atomic-write.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-attachment
 
@@ -112,17 +135,38 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | --- | --- | --- | --- | --- |
 | `packages/attachment/attachment/tests/admission.spec.ts` | `admission.spec.ts` | `tests/upstream/attachment/tests/admission.spec.ts` | `unchanged` | — |
 | `packages/attachment/attachment/tests/index.spec.ts` | `index.spec.ts` | `tests/upstream/attachment/tests/index.spec.ts` | `unchanged` | — |
+| `packages/attachment/attachment/tests/request-projection.spec.ts` | `request-projection.spec.ts` | `tests/upstream/attachment/tests/request-projection.spec.ts` | `unchanged` | — |
+
+### @teoclub/harness-brand
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-brand` | `packages/util/brand` | `packages/harness/brand` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/util/brand/tests/brand.spec.ts` | `brand.spec.ts` | `tests/upstream/brand/tests/brand.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-code-runtime
 
 | Upstream package | Upstream path | Local path | Classification |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-code-runtime` | `packages/code-runtime/code-runtime` | `packages/harness/code-runtime` | `KEEP` |
+| `@deepseek-ai/dsh-ptc-runtime` | `packages/ptc-runtime/ptc-runtime` | `packages/harness/code-runtime` | `KEEP` |
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/code-runtime/code-runtime/tests/reserved.spec.ts` | `reserved.spec.ts` | `tests/upstream/code-runtime/tests/reserved.spec.ts` | `unchanged` | — |
-| `packages/code-runtime/code-runtime/tests/service.spec.ts` | `service.spec.ts` | `tests/upstream/code-runtime/tests/service.spec.ts` | `unchanged` | — |
+| `packages/ptc-runtime/ptc-runtime/tests/reserved.spec.ts` | `reserved.spec.ts` | `tests/upstream/code-runtime/tests/reserved.spec.ts` | `unchanged` | — |
+| `packages/ptc-runtime/ptc-runtime/tests/service.spec.ts` | `service.spec.ts` | `tests/upstream/code-runtime/tests/service.spec.ts` | `unchanged` | — |
+
+### @teoclub/harness-crypto
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-util-crypto` | `packages/util/crypto` | `packages/harness/crypto` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/util/crypto/tests/uuid.spec.ts` | `uuid.spec.ts` | `tests/upstream/crypto/tests/uuid.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-home-paths
 
@@ -142,7 +186,7 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/runtime-diagnostics/invariants/tests/service.spec.ts` | `service.spec.ts` | `tests/upstream/invariants/tests/service.spec.ts` | `unchanged` | — |
+| `packages/runtime-diagnostics/invariants/tests/service.spec.ts` | `service.spec.ts` | `tests/upstream/invariants/tests/service.spec.ts` | `adapted` | the blocklist-precedence case pairs a package-name pattern with the packages it must match, and the pattern is a REGEX PREFIX (`^@deepseek-ai/dsh-`), which no whole-token rewrite can see. Left as-is the allowlist matches nothing and the case passes for the wrong reason, so the pattern is repointed at the names this repo actually registers. The other upstream spellings in this file are opaque probe names the cases never match against a real package, and stay as written |
 
 ### @teoclub/harness-launch-environment
 
@@ -165,6 +209,7 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/llm/llm/tests/adapter-failure.spec.ts` | `adapter-failure.spec.ts` | `tests/upstream/llm/tests/adapter-failure.spec.ts` | `unchanged` | — |
 | `packages/llm/llm/tests/api-key.spec.ts` | `api-key.spec.ts` | `tests/upstream/llm/tests/api-key.spec.ts` | `unchanged` | — |
 | `packages/llm/llm/tests/assembler.spec.ts` | `assembler.spec.ts` | `tests/upstream/llm/tests/assembler.spec.ts` | `unchanged` | — |
+| `packages/llm/llm/tests/assistant-stream.spec.ts` | `assistant-stream.spec.ts` | `tests/upstream/llm/tests/assistant-stream.spec.ts` | `unchanged` | — |
 | `packages/llm/llm/tests/attribution.spec.ts` | `attribution.spec.ts` | `tests/upstream/llm/tests/attribution.spec.ts` | `adapted` | reads the upstream package manifest relative to the test location; after the move to tests/upstream/ it must point into the ported package directory |
 | `packages/llm/llm/tests/call-config.spec.ts` | `call-config.spec.ts` | `tests/upstream/llm/tests/call-config.spec.ts` | `unchanged` | — |
 | `packages/llm/llm/tests/content.spec.ts` | `content.spec.ts` | `tests/upstream/llm/tests/content.spec.ts` | `unchanged` | — |
@@ -186,6 +231,30 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/typert/protocol/tests/fixtures/source-launch.ts` | `source-launch.ts` | `tests/upstream/protocol/tests/fixtures/source-launch.ts` | `unchanged` | — |
 | `packages/typert/protocol/tests/protocol.spec.ts` | `protocol.spec.ts` | `tests/upstream/protocol/tests/protocol.spec.ts` | `unchanged` | — |
 
+### @teoclub/harness-sandbox
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-sandbox` | `packages/sandbox/sandbox` | `packages/harness/sandbox` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/sandbox/sandbox/tests/diagnostics.spec.ts` | `diagnostics.spec.ts` | `tests/upstream/sandbox/tests/diagnostics.spec.ts` | `unchanged` | — |
+| `packages/sandbox/sandbox/tests/escalation.spec.ts` | `escalation.spec.ts` | `tests/upstream/sandbox/tests/escalation.spec.ts` | `unchanged` | — |
+| `packages/sandbox/sandbox/tests/roots.spec.ts` | `roots.spec.ts` | `tests/upstream/sandbox/tests/roots.spec.ts` | `unchanged` | — |
+| `packages/sandbox/sandbox/tests/vocabulary.spec.ts` | `vocabulary.spec.ts` | `tests/upstream/sandbox/tests/vocabulary.spec.ts` | `unchanged` | — |
+
+### @teoclub/harness-sandbox-policy
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-sandbox-policy` | `packages/sandbox/sandbox-policy` | `packages/harness/sandbox-policy` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/sandbox/sandbox-policy/tests/invariant.spec.ts` | `invariant.spec.ts` | `tests/upstream/sandbox-policy/tests/invariant.spec.ts` | `unchanged` | — |
+| `packages/sandbox/sandbox-policy/tests/policy.spec.ts` | `policy.spec.ts` | `tests/upstream/sandbox-policy/tests/policy.spec.ts` | `unchanged` | — |
+
 ### @teoclub/harness-scope
 
 | Upstream package | Upstream path | Local path | Classification |
@@ -206,15 +275,18 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/core/session/tests/chunk-rows.spec.ts` | `chunk-rows.spec.ts` | `tests/upstream/session/tests/chunk-rows.spec.ts` | `unchanged` | — |
+| `packages/core/session/tests/canonical-envelopes.spec.ts` | `canonical-envelopes.spec.ts` | `tests/upstream/session/tests/canonical-envelopes.spec.ts` | `adapted` | hand-maintained: records the canonical surface-op key pair (`startSeq`/`endSeq`) alongside the noncanonical spellings the validator must refuse |
 | `packages/core/session/tests/derived-cache.spec.ts` | `derived-cache.spec.ts` | `tests/upstream/session/tests/derived-cache.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/fork.spec.ts` | `fork.spec.ts` | `tests/upstream/session/tests/fork.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/invariant.spec.ts` | `invariant.spec.ts` | `tests/upstream/session/tests/invariant.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/json.spec.ts` | `json.spec.ts` | `tests/upstream/session/tests/json.spec.ts` | `unchanged` | — |
+| `packages/core/session/tests/message-projections.spec.ts` | `message-projections.spec.ts` | `tests/upstream/session/tests/message-projections.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/properties.spec.ts` | `properties.spec.ts` | `tests/upstream/session/tests/properties.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/repair.spec.ts` | `repair.spec.ts` | `tests/upstream/session/tests/repair.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/request-header.spec.ts` | `request-header.spec.ts` | `tests/upstream/session/tests/request-header.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/scoped.spec.ts` | `scoped.spec.ts` | `tests/upstream/session/tests/scoped.spec.ts` | `unchanged` | — |
+| `packages/core/session/tests/seq-ranges.spec.ts` | `seq-ranges.spec.ts` | `tests/upstream/session/tests/seq-ranges.spec.ts` | `unchanged` | — |
+| `packages/core/session/tests/sequence-types.spec.ts` | `sequence-types.spec.ts` | `tests/upstream/session/tests/sequence-types.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/session.spec.ts` | `session.spec.ts` | `tests/upstream/session/tests/session.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/surface.spec.ts` | `surface.spec.ts` | `tests/upstream/session/tests/surface.spec.ts` | `unchanged` | — |
 | `packages/core/session/tests/typert.spec.ts` | `typert.spec.ts` | `tests/upstream/session/tests/typert.spec.ts` | `unchanged` | — |
@@ -224,15 +296,27 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream package | Upstream path | Local path | Classification |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-session-persistence` | `packages/session/session-persistence` | `packages/harness/session-persistence` | `KEEP` |
+| `@deepseek-ai/dsh-session-persistence` | `packages/session/session-persistence` | `packages/harness/session-persistence` | `ADAPT` |
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/session/session-persistence/tests/contract.ts` | `contract.ts` | `tests/upstream/session-persistence/tests/contract.ts` | `unchanged` | — |
-| `packages/session/session-persistence/tests/coordinator-contract.ts` | `coordinator-contract.ts` | `tests/upstream/session-persistence/tests/coordinator-contract.ts` | `adapted` | bun's .resolves.not.toThrow() treats any truthy resolved value as a thrown value, so the flush boolean fails it; asserting the documented store contract (flush drains to true) keeps the same meaning in both runtimes |
+| `packages/session/session-persistence/tests/contract.ts` | `contract.ts` | `tests/upstream/session-persistence/tests/contract.ts` | `adapted` | hand-maintained: the ported storage contract plus Rigo's `appendLog` fixture helper, which the local coordinator and write-behind suites drive live sessions through |
+| `packages/session/session-persistence/tests/coordinator-contract.ts` | `coordinator-contract.ts` | `tests/upstream/session-persistence/tests/coordinator-contract.ts` | `unchanged` | — |
+| `packages/session/session-persistence/tests/live-write-contract.ts` | `live-write-contract.ts` | `tests/upstream/session-persistence/tests/live-write-contract.ts` | `unchanged` | — |
 | `packages/session/session-persistence/tests/persistence.spec.ts` | `persistence.spec.ts` | `tests/upstream/session-persistence/tests/persistence.spec.ts` | `unchanged` | — |
-| `packages/session/session-persistence/tests/preparations.spec.ts` | `preparations.spec.ts` | `tests/upstream/session-persistence/tests/preparations.spec.ts` | `adapted` | bun flags the promise rejection raised synchronously by AbortController.abort() as unhandled when no handler is attached yet, so the abort-then-await shape fails; attaching the lazy rejection handlers before aborting keeps the same semantics in both runtimes |
+| `packages/session/session-persistence/tests/preparations.spec.ts` | `preparations.spec.ts` | `tests/upstream/session-persistence/tests/preparations.spec.ts` | `unchanged` | — |
+| `packages/session/session-persistence/tests/storage-contract.spec.ts` | `storage-contract.spec.ts` | `tests/upstream/session-persistence/tests/storage-contract.spec.ts` | `unchanged` | — |
 | `packages/session/session-persistence/tests/write-behind.spec.ts` | `write-behind.spec.ts` | `tests/upstream/session-persistence/tests/write-behind.spec.ts` | `unchanged` | — |
+
+### @teoclub/harness-session-projection
+
+| Upstream package | Upstream path | Local path | Classification |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-session-projection` | `packages/session/session-projection` | `packages/harness/session-projection` | `KEEP` |
+
+| Upstream File | Upstream Test | Local Test File | Status | Reason |
+| --- | --- | --- | --- | --- |
+| `packages/session/session-projection/tests/registry.spec.ts` | `registry.spec.ts` | `tests/upstream/session-projection/tests/registry.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-settings
 
@@ -278,12 +362,13 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/core/tools/tests/code-mode.spec.ts` | `code-mode.spec.ts` | `tests/upstream/tools/tests/code-mode.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/execution-mode.spec.ts` | `execution-mode.spec.ts` | `tests/upstream/tools/tests/execution-mode.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/execution-signal-types.spec.ts` | `execution-signal-types.spec.ts` | `tests/upstream/tools/tests/execution-signal-types.spec.ts` | `unchanged` | — |
+| `packages/core/tools/tests/fixtures/literal-sdk.ts` | `literal-sdk.ts` | `tests/upstream/tools/tests/fixtures/literal-sdk.ts` | `unchanged` | — |
 | `packages/core/tools/tests/invariant.spec.ts` | `invariant.spec.ts` | `tests/upstream/tools/tests/invariant.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/json-schema.spec.ts` | `json-schema.spec.ts` | `tests/upstream/tools/tests/json-schema.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/properties.spec.ts` | `properties.spec.ts` | `tests/upstream/tools/tests/properties.spec.ts` | `unchanged` | — |
+| `packages/core/tools/tests/ptc.spec.ts` | `ptc.spec.ts` | `tests/upstream/tools/tests/ptc.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/py-types.spec.ts` | `py-types.spec.ts` | `tests/upstream/tools/tests/py-types.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/schema.spec.ts` | `schema.spec.ts` | `tests/upstream/tools/tests/schema.spec.ts` | `unchanged` | — |
 | `packages/core/tools/tests/scoped.spec.ts` | `scoped.spec.ts` | `tests/upstream/tools/tests/scoped.spec.ts` | `unchanged` | — |

@@ -12,6 +12,9 @@
       "path": "../agent"
     },
     {
+      "path": "../brand"
+    },
+    {
       "path": "../code-runtime"
     },
     {
@@ -19,6 +22,12 @@
     },
     {
       "path": "../llm"
+    },
+    {
+      "path": "../sandbox"
+    },
+    {
+      "path": "../sandbox-policy"
     },
     {
       "path": "../scope"
@@ -31,6 +40,9 @@
     },
     {
       "path": "../user-approval"
+    },
+    {
+      "path": "../values"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

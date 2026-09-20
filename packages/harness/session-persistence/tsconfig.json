@@ -12,13 +12,13 @@
       "path": "../brand"
     },
     {
-      "path": "../invariants"
-    },
-    {
       "path": "../session"
     },
     {
       "path": "../timeout"
+    },
+    {
+      "path": "../values"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

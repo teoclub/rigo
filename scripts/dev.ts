@@ -32,7 +32,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer } from 'vite'
 import {
-  CallId,
+  ToolCallId,
   LlmAdapter,
   type GenerateOptions,
   type LlmResolvedModelInfo,
@@ -44,7 +44,7 @@ import { DocumentId, type DocumentsService } from '@teoclub/work-documents'
 import { NodeSqliteDriver } from '@teoclub/shared-storage-sqlite-node/node'
 import { SqliteFtsKnowledgeProvider } from '@teoclub/shared-knowledge-sqlite-fts'
 
-// Bun exposes import.meta.dir; Node runs this entry (node:sqlite), where
+// Bun exposes import.meta.dirname; Node runs this entry (node:sqlite), where
 // the URL form is the portable equivalent.
 const root = fileURLToPath(new URL('..', import.meta.url))
 const dataDir = join(root, '.local', 'data')
@@ -106,10 +106,19 @@ class DevMockAdapter extends LlmAdapter {
   }
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    const messages = options.messages as { role: string, content: { type: string, text?: string }[] }[]
+    const messages = options.messages as {
+      role: string
+      source?: { kind?: string }
+      content: { type: string, text?: string }[]
+    }[]
+    // The last message the USER wrote, not merely the last `role: 'user'` one:
+    // assembly appends an injected runtime-context/user-role snapshot after it
+    // (source.kind `plugin`), and reading that as the prompt is why `/write`
+    // never matched.
     let lastUserIndex = -1
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]!.role === 'user') { lastUserIndex = index; break }
+      const message = messages[index]!
+      if (message.role === 'user' && message.source?.kind === 'user') { lastUserIndex = index; break }
     }
     const userText = lastUserIndex === -1 ? '' : messageText(messages[lastUserIndex]!)
     const writeMatch = /^\/write\s+(\S+)\s*\n?([\s\S]*)$/.exec(userText.trim())
@@ -131,7 +140,7 @@ class DevMockAdapter extends LlmAdapter {
         }
         const version = await this.currentVersion(relativePath)
         yield* withPace(toolCallResponse(
-          CallId(`call_${randomUUID().slice(0, 8)}`),
+          ToolCallId(`call_${randomUUID().slice(0, 8)}`),
           tool.name,
           {
             relativePath,
@@ -284,10 +293,13 @@ Ctrl+C stops both servers.`)
     if (disposing) return
     disposing = true
     const server = vite.httpServer
-    if (server !== undefined) {
+    if (server !== null && server !== undefined) {
       await new Promise<void>((resolve) => {
         server.close(() => resolve())
-        if (typeof server.closeAllConnections === 'function') server.closeAllConnections()
+        // Node's http.Server drops keep-alive sockets here; Vite's own
+        // HttpServer type does not carry the method, so it is probed.
+        const closeAll = (server as { closeAllConnections?: () => void }).closeAllConnections
+        if (typeof closeAll === 'function') closeAll.call(server)
       })
     }
     await handle.dispose()

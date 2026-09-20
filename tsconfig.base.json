@@ -88,9 +88,6 @@
       "@teoclub/harness-agent-default-model": [
         "./packages/harness/agent-default-model/src"
       ],
-      "@teoclub/harness-agent-default-model/invariant": [
-        "./packages/harness/agent-default-model/src/invariant.ts"
-      ],
       "@teoclub/harness-agent-default-model/src/*": [
         "./packages/harness/agent-default-model/src/*"
       ],
@@ -112,9 +109,6 @@
       "@teoclub/harness-agent-tool-presentation": [
         "./packages/harness/agent-tool-presentation/src"
       ],
-      "@teoclub/harness-agent-tool-presentation/invariant": [
-        "./packages/harness/agent-tool-presentation/src/invariant.ts"
-      ],
       "@teoclub/harness-agent-tool-presentation/src/*": [
         "./packages/harness/agent-tool-presentation/src/*"
       ],
@@ -130,20 +124,20 @@
       "@teoclub/harness-app-boot": [
         "./packages/harness/app-boot/src"
       ],
-      "@teoclub/harness-app-boot/invariant": [
-        "./packages/harness/app-boot/src/invariant.ts"
-      ],
       "@teoclub/harness-app-boot/src/*": [
         "./packages/harness/app-boot/src/*"
+      ],
+      "@teoclub/harness-atomic-write": [
+        "./packages/harness/atomic-write/src"
+      ],
+      "@teoclub/harness-atomic-write/src/*": [
+        "./packages/harness/atomic-write/src/*"
       ],
       "@teoclub/harness-attachment": [
         "./packages/harness/attachment/src"
       ],
       "@teoclub/harness-attachment/brand": [
         "./packages/harness/attachment/src/brand.ts"
-      ],
-      "@teoclub/harness-attachment/invariant": [
-        "./packages/harness/attachment/src/invariant.ts"
       ],
       "@teoclub/harness-attachment/src/*": [
         "./packages/harness/attachment/src/*"
@@ -154,17 +148,11 @@
       "@teoclub/harness-brand": [
         "./packages/harness/brand/src"
       ],
-      "@teoclub/harness-brand/invariant": [
-        "./packages/harness/brand/src/invariant.ts"
-      ],
       "@teoclub/harness-brand/src/*": [
         "./packages/harness/brand/src/*"
       ],
       "@teoclub/harness-code-runtime": [
         "./packages/harness/code-runtime/src"
-      ],
-      "@teoclub/harness-code-runtime/invariant": [
-        "./packages/harness/code-runtime/src/invariant.ts"
       ],
       "@teoclub/harness-code-runtime/src/*": [
         "./packages/harness/code-runtime/src/*"
@@ -178,11 +166,14 @@
       "@teoclub/harness-context/src/*": [
         "./packages/harness/context/src/*"
       ],
+      "@teoclub/harness-crypto": [
+        "./packages/harness/crypto/src"
+      ],
+      "@teoclub/harness-crypto/src/*": [
+        "./packages/harness/crypto/src/*"
+      ],
       "@teoclub/harness-home-paths": [
         "./packages/harness/home-paths/src"
-      ],
-      "@teoclub/harness-home-paths/invariant": [
-        "./packages/harness/home-paths/src/invariant.ts"
       ],
       "@teoclub/harness-home-paths/src/*": [
         "./packages/harness/home-paths/src/*"
@@ -190,17 +181,11 @@
       "@teoclub/harness-invariants": [
         "./packages/harness/invariants/src"
       ],
-      "@teoclub/harness-invariants/invariant": [
-        "./packages/harness/invariants/src/invariant.ts"
-      ],
       "@teoclub/harness-invariants/src/*": [
         "./packages/harness/invariants/src/*"
       ],
       "@teoclub/harness-launch-environment": [
         "./packages/harness/launch-environment/src"
-      ],
-      "@teoclub/harness-launch-environment/invariant": [
-        "./packages/harness/launch-environment/src/invariant.ts"
       ],
       "@teoclub/harness-launch-environment/src/*": [
         "./packages/harness/launch-environment/src/*"
@@ -210,6 +195,9 @@
       ],
       "@teoclub/harness-llm-mock": [
         "./packages/harness/llm-mock/src"
+      ],
+      "@teoclub/harness-llm-mock/index.d": [
+        "./packages/harness/llm-mock/src/index.d.ts"
       ],
       "@teoclub/harness-llm-mock/src/*": [
         "./packages/harness/llm-mock/src/*"
@@ -247,17 +235,38 @@
       "@teoclub/harness-loop-protocol/src/*": [
         "./packages/harness/loop-protocol/src/*"
       ],
+      "@teoclub/harness-package-manifest": [
+        "./packages/harness/package-manifest/src"
+      ],
+      "@teoclub/harness-package-manifest/src/*": [
+        "./packages/harness/package-manifest/src/*"
+      ],
+      "@teoclub/harness-package-manifest/types": [
+        "./packages/harness/package-manifest/src/types.ts"
+      ],
       "@teoclub/harness-protocol": [
         "./packages/harness/protocol/src"
-      ],
-      "@teoclub/harness-protocol/invariant": [
-        "./packages/harness/protocol/src/invariant.ts"
       ],
       "@teoclub/harness-protocol/src/*": [
         "./packages/harness/protocol/src/*"
       ],
       "@teoclub/harness-protocol/types": [
         "./packages/harness/protocol/src/types.ts"
+      ],
+      "@teoclub/harness-sandbox": [
+        "./packages/harness/sandbox/src"
+      ],
+      "@teoclub/harness-sandbox-policy": [
+        "./packages/harness/sandbox-policy/src"
+      ],
+      "@teoclub/harness-sandbox-policy/invariant": [
+        "./packages/harness/sandbox-policy/src/invariant.ts"
+      ],
+      "@teoclub/harness-sandbox-policy/src/*": [
+        "./packages/harness/sandbox-policy/src/*"
+      ],
+      "@teoclub/harness-sandbox/src/*": [
+        "./packages/harness/sandbox/src/*"
       ],
       "@teoclub/harness-scope": [
         "./packages/harness/scope/src"
@@ -274,11 +283,17 @@
       "@teoclub/harness-session-persistence": [
         "./packages/harness/session-persistence/src"
       ],
-      "@teoclub/harness-session-persistence/invariant": [
-        "./packages/harness/session-persistence/src/invariant.ts"
-      ],
       "@teoclub/harness-session-persistence/src/*": [
         "./packages/harness/session-persistence/src/*"
+      ],
+      "@teoclub/harness-session-projection": [
+        "./packages/harness/session-projection/src"
+      ],
+      "@teoclub/harness-session-projection/src/*": [
+        "./packages/harness/session-projection/src/*"
+      ],
+      "@teoclub/harness-session-projection/types": [
+        "./packages/harness/session-projection/src/types.ts"
       ],
       "@teoclub/harness-session-protocol": [
         "./packages/harness/session-protocol/src"
@@ -322,9 +337,6 @@
       "@teoclub/harness-timeout": [
         "./packages/harness/timeout/src"
       ],
-      "@teoclub/harness-timeout/invariant": [
-        "./packages/harness/timeout/src/invariant.ts"
-      ],
       "@teoclub/harness-timeout/src/*": [
         "./packages/harness/timeout/src/*"
       ],
@@ -355,9 +367,6 @@
       "@teoclub/harness-typert-registry/client": [
         "./packages/harness/typert-registry/src/client/index.ts"
       ],
-      "@teoclub/harness-typert-registry/invariant": [
-        "./packages/harness/typert-registry/src/invariant.ts"
-      ],
       "@teoclub/harness-typert-registry/src/*": [
         "./packages/harness/typert-registry/src/*"
       ],
@@ -375,6 +384,12 @@
       ],
       "@teoclub/harness-user-approval/types": [
         "./packages/harness/user-approval/src/types.ts"
+      ],
+      "@teoclub/harness-values": [
+        "./packages/harness/values/src"
+      ],
+      "@teoclub/harness-values/src/*": [
+        "./packages/harness/values/src/*"
       ],
       "@teoclub/kit": [
         "./vendor/cordis/packages/kit/src/index.ts"
@@ -444,6 +459,9 @@
       ],
       "@teoclub/work-context": [
         "./packages/work/context/src"
+      ],
+      "@teoclub/work-context/last-user-input": [
+        "./packages/work/context/src/last-user-input.ts"
       ],
       "@teoclub/work-context/src/*": [
         "./packages/work/context/src/*"

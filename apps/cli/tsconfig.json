@@ -8,6 +8,7 @@
   "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
   "references": [
     { "path": "../../packages/bundle/work-base" },
+    { "path": "../../packages/harness/llm-mock" },
     { "path": "../../packages/harness/llm-openai-compatible" }
   ]
 }

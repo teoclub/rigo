@@ -417,7 +417,7 @@ export function createApiServer(options: ApiServerOptions): ApiServer {
     }
 
     if (route.length === 3 && route[0] === 'sessions' && route[2] === 'audit' && method === 'GET') {
-      const entries = facade.auditProjection(route[1]!)
+      const entries = await facade.auditProjection(route[1]!)
       sendJson(res, 200, { entries })
       return
     }

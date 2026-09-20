@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { isJsonValue } from '@teoclub/harness-session'
+import { isJsonValue } from '@teoclub/harness-values'
 import { parameterSchemaSpecToJsonSchema, validateArgs } from '@teoclub/harness-tools'
 import type { ParameterPropertySpec, ParameterSchemaSpec, ValueSchemaSpec } from '@teoclub/harness-tools'
 

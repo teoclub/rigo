@@ -28,7 +28,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { BASELINE, NOT_PORTED, PACKAGES } from './lib/baseline.ts'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 const refreshDir = process.argv.indexOf('--refresh') >= 0
   ? resolve(process.argv[process.argv.indexOf('--refresh') + 1] ?? '')
   : undefined
@@ -152,7 +152,7 @@ for (const row of PACKAGES) {
     fail(`${row.localPackage}: package.json is not valid JSON (${String(error)})`)
     continue
   }
-  const source = manifest.teoclub?.source as Record<string, unknown> | undefined
+  const source = (manifest.teoclub as { source?: Record<string, unknown> } | undefined)?.source
   const commit = source?.commit
   if (commit !== BASELINE.commit) {
     fail(`${row.localPackage}: teoclub.source.commit is ${String(commit)}, expected ${BASELINE.commit}`)
@@ -175,7 +175,7 @@ if (!existsSync(baselineDoc)) {
   } else {
     ok('docs/upstream-baseline.md forbids automatic upstream-master following')
   }
-  if (!doc.includes('dsh-v0.1.1-rc.2') || !doc.includes(BASELINE.commit)) {
+  if (!doc.includes(BASELINE.tag) || !doc.includes(BASELINE.commit)) {
     fail('docs/upstream-baseline.md does not record the pinned tag and full commit SHA')
   } else {
     ok('docs/upstream-baseline.md records the pinned tag and commit SHA')
@@ -250,7 +250,7 @@ if (refreshDir) {
     ] as const) {
       // init runs from the parent directory: its target does not exist yet.
       const cwd = step[0] === 'init' ? dirname(refreshDir) : refreshDir
-      const result = git(step[1], cwd)
+      const result = git([...step[1]], cwd)
       if (!result.ok) {
         fail(`fresh re-fetch step "${step[0]}" failed (network required); the tag could not be re-verified in a fresh workdir`)
         break

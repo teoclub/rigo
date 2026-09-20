@@ -18,7 +18,7 @@ import type { Page } from '@playwright/test'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
 import { Context } from '@teoclub/cordis'
 import { MockAdapter, textResponse, toolCallResponse, type HangAfter } from '@teoclub/harness-llm-mock'
-import { CallId } from '@teoclub/harness-llm'
+import { ToolCallId } from '@teoclub/harness-llm'
 import { DocumentId } from '@teoclub/work-documents'
 import { bootWorkBase } from '@teoclub/work-base'
 import { NodeSqliteDriver } from '@teoclub/shared-storage-sqlite-node/node'
@@ -200,7 +200,7 @@ export function happyPathScript(): (Parameters<typeof MockAdapter>[0])[0][] {
     textResponse('The knowledge base says rockets use fuel for thrust. [s1]'),
     (request: { tools?: { name: string }[]; sessionId?: string }) =>
       toolCallResponse(
-        CallId('call-e2e-write'),
+        ToolCallId('call-e2e-write'),
         writeToolName(request),
         {
           relativePath: 'docs/plan.md',

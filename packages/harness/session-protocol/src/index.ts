@@ -25,6 +25,11 @@
  * @module @teoclub/harness-session-protocol
  */
 
+// These modules are protocol-verification machinery: no bundle mounts them and
+// every caller is a test (tests/integration/{loop,session}-protocol.spec.ts).
+// They inspect committed history by design, which is the upstream-sanctioned
+// use of the synchronous readers for test-side event inspection.
+
 import type { Message } from '@teoclub/harness-llm'
 import type {
   Session,
@@ -115,7 +120,7 @@ export function encodeSessionEvent(session: Session, event: SessionEvent): RigoS
 export function encodeSessionLog(session: Session): RigoSessionEvent[] {
   let openTurn: number | undefined
   let openStep: number | undefined
-  return session.events.map((event) => {
+  return session.snapshotEvents().map((event) => {
     const scoped = event.data as TurnScoped
     if (event.type === 'turn/start') openTurn = scoped.turn
     else if (event.type === 'step/start') openStep = scoped.step
@@ -153,7 +158,10 @@ export function deriveModelHistory(session: Session): Message[] {
 /** The five event families every turn must write to the log. */
 export const REQUIRED_EVENT_FAMILIES = [
   'user/message',
-  'assistant/chunk',
+  // 0.1.6 removed the per-token `assistant/chunk` event: a streamed attempt now
+  // settles as `assistant/attempt` (packed `stream: AssistantStreamRecord[]`)
+  // and a non-streamed response settles as `assistant/message` alone. Only the
+  // message is unconditional, so only it is a REQUIRED family.
   'assistant/message',
   'tool/call',
   'tool/result',
@@ -172,7 +180,7 @@ export interface EventVocabularyCoverage {
  * @returns the present/missing family split.
  */
 export function eventVocabularyCoverage(session: Session): EventVocabularyCoverage {
-  const present = new Set<SessionEventType>(session.events.map((event) => event.type))
+  const present = new Set<SessionEventType>(session.snapshotEvents().map((event) => event.type))
   const missing: SessionEventType[] = []
   for (const family of REQUIRED_EVENT_FAMILIES) {
     if (!present.has(family)) missing.push(family)
@@ -203,7 +211,7 @@ export interface SessionLogViolation {
  */
 export function validateSessionLog(session: Session): SessionLogViolation[] {
   const violations: SessionLogViolation[] = []
-  const events = session.events
+  const events = session.snapshotEvents()
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index]!
     if (event.seq !== index) {

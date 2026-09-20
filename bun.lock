@@ -73,6 +73,7 @@
         "fast-check": "^3.23.0",
         "js-yaml": "^4.1.0",
         "jsdom": "^30.0.1",
+        "node-addon-require-builtin": "^0.1.6",
         "oxlint": "^1.0.0",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
@@ -92,6 +93,7 @@
         "rigo": "bin.js",
       },
       "dependencies": {
+        "@teoclub/harness-llm-mock": "*",
         "@teoclub/harness-llm-openai-compatible": "*",
         "@teoclub/work-base": "*",
       },
@@ -160,6 +162,7 @@
         "@teoclub/harness-app-boot": "*",
         "@teoclub/harness-context": "*",
         "@teoclub/harness-session": "*",
+        "@teoclub/harness-session-projection": "*",
         "@teoclub/harness-tools-protocol": "*",
         "@teoclub/shared-actions": "*",
         "@teoclub/shared-approvals": "*",
@@ -204,7 +207,9 @@
         "@teoclub/harness-protocol": "*",
         "@teoclub/harness-scope": "*",
         "@teoclub/harness-session": "*",
+        "@teoclub/harness-session-projection": "*",
         "@teoclub/harness-system-prompt": "*",
+        "@teoclub/harness-values": "*",
       },
     },
     "packages/harness/agent-default-model": {
@@ -215,17 +220,19 @@
       },
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-agent": "workspace:*",
-        "@teoclub/harness-invariants": "workspace:*",
-        "@teoclub/harness-llm": "workspace:*",
-        "@teoclub/harness-settings": "workspace:*",
+        "@teoclub/harness-agent": "*",
+        "@teoclub/harness-llm": "*",
+        "@teoclub/harness-settings": "*",
       },
     },
     "packages/harness/agent-loop": {
       "name": "@teoclub/harness-agent-loop",
       "version": "0.1.0",
       "dependencies": {
+        "@teoclub/harness-brand": "*",
+        "@teoclub/harness-values": "*",
         "@teoclub/schemastery": "*",
+        "zod": "^4.4.3",
       },
       "peerDependencies": {
         "@teoclub/cordis": "*",
@@ -235,6 +242,7 @@
         "@teoclub/harness-scope": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-session-persistence": "*",
+        "@teoclub/harness-session-projection": "*",
         "@teoclub/harness-settings": "*",
         "@teoclub/harness-system-prompt": "*",
         "@teoclub/harness-tools": "*",
@@ -258,16 +266,19 @@
       },
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "workspace:*",
-        "@teoclub/harness-tools": "workspace:*",
+        "@teoclub/harness-tools": "*",
       },
     },
     "packages/harness/app-boot": {
       "name": "@teoclub/harness-app-boot",
       "version": "0.1.0",
       "dependencies": {
+        "@teoclub/harness-atomic-write": "*",
+        "@teoclub/harness-package-manifest": "*",
         "chokidar": "^4.0.3",
         "js-yaml": "^4.2.0",
+        "node-addon-require-builtin": "^0.1.6",
+        "resolve.exports": "^2.0.3",
       },
       "devDependencies": {
         "@types/js-yaml": "^4.0.9",
@@ -281,12 +292,18 @@
         "@teoclub/harness-agent": "*",
         "@teoclub/harness-agent-loop": "*",
         "@teoclub/harness-home-paths": "*",
-        "@teoclub/harness-invariants": "*",
         "@teoclub/harness-launch-environment": "*",
         "@teoclub/harness-llm": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-system-prompt": "*",
         "@teoclub/harness-tools": "*",
+      },
+    },
+    "packages/harness/atomic-write": {
+      "name": "@teoclub/harness-atomic-write",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
       },
     },
     "packages/harness/attachment": {
@@ -295,7 +312,6 @@
       "peerDependencies": {
         "@teoclub/cordis": "*",
         "@teoclub/harness-brand": "*",
-        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/brand": {
@@ -303,7 +319,6 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/code-runtime": {
@@ -311,7 +326,7 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "*",
+        "@teoclub/harness-sandbox": "*",
       },
     },
     "packages/harness/context": {
@@ -322,12 +337,18 @@
         "@teoclub/harness-session": "*",
       },
     },
+    "packages/harness/crypto": {
+      "name": "@teoclub/harness-crypto",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
+      },
+    },
     "packages/harness/home-paths": {
       "name": "@teoclub/harness-home-paths",
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/invariants": {
@@ -345,21 +366,22 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/llm": {
       "name": "@teoclub/harness-llm",
       "version": "0.1.0",
       "dependencies": {
+        "@teoclub/harness-brand": "*",
+        "@teoclub/harness-crypto": "*",
+        "@teoclub/harness-protocol": "*",
+        "@teoclub/harness-timeout": "*",
+        "@teoclub/harness-values": "*",
         "@teoclub/schemastery": "*",
+        "zod": "^4.4.3",
       },
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-attachment": "*",
-        "@teoclub/harness-brand": "*",
-        "@teoclub/harness-invariants": "*",
-        "@teoclub/harness-timeout": "*",
       },
     },
     "packages/harness/llm-mock": {
@@ -393,12 +415,47 @@
         "@teoclub/harness-session": "*",
       },
     },
+    "packages/harness/package-manifest": {
+      "name": "@teoclub/harness-package-manifest",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
+      },
+    },
     "packages/harness/protocol": {
       "name": "@teoclub/harness-protocol",
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
+      },
+    },
+    "packages/harness/sandbox": {
+      "name": "@teoclub/harness-sandbox",
+      "version": "0.1.0",
+      "dependencies": {
+        "@teoclub/harness-values": "*",
+      },
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
+        "@teoclub/harness-llm": "*",
+        "@teoclub/harness-session": "*",
+      },
+    },
+    "packages/harness/sandbox-policy": {
+      "name": "@teoclub/harness-sandbox-policy",
+      "version": "0.1.0",
+      "dependencies": {
+        "@teoclub/schemastery": "*",
+        "zod": "^4.4.3",
+      },
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
+        "@teoclub/harness-agent": "*",
         "@teoclub/harness-invariants": "*",
+        "@teoclub/harness-sandbox": "*",
+        "@teoclub/harness-session": "*",
+        "@teoclub/harness-session-projection": "*",
+        "@teoclub/harness-system-prompt": "*",
       },
     },
     "packages/harness/scope": {
@@ -412,24 +469,38 @@
     "packages/harness/session": {
       "name": "@teoclub/harness-session",
       "version": "0.1.0",
+      "dependencies": {
+        "@teoclub/harness-brand": "*",
+        "@teoclub/harness-llm": "*",
+        "@teoclub/harness-values": "*",
+      },
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-brand": "*",
-        "@teoclub/harness-invariants": "*",
-        "@teoclub/harness-llm": "*",
-        "@teoclub/harness-protocol": "*",
         "@teoclub/harness-scope": "*",
       },
     },
     "packages/harness/session-persistence": {
       "name": "@teoclub/harness-session-persistence",
       "version": "0.1.0",
+      "dependencies": {
+        "@teoclub/harness-values": "*",
+      },
       "peerDependencies": {
         "@teoclub/cordis": "*",
         "@teoclub/harness-brand": "*",
-        "@teoclub/harness-invariants": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-timeout": "*",
+      },
+    },
+    "packages/harness/session-projection": {
+      "name": "@teoclub/harness-session-projection",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.4.3",
+      },
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
+        "@teoclub/harness-session": "*",
       },
     },
     "packages/harness/session-protocol": {
@@ -442,10 +513,14 @@
     "packages/harness/settings": {
       "name": "@teoclub/harness-settings",
       "version": "0.1.0",
+      "dependencies": {
+        "@teoclub/harness-values": "*",
+      },
       "peerDependencies": {
         "@teoclub/cordis": "*",
         "@teoclub/harness-brand": "*",
         "@teoclub/harness-invariants": "*",
+        "@teoclub/harness-session": "*",
         "@teoclub/schemastery": "*",
       },
     },
@@ -467,13 +542,14 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "*",
       },
     },
     "packages/harness/tools": {
       "name": "@teoclub/harness-tools",
       "version": "0.1.0",
       "dependencies": {
+        "@teoclub/harness-brand": "*",
+        "@teoclub/harness-values": "*",
         "@teoclub/schemastery": "*",
       },
       "peerDependencies": {
@@ -482,6 +558,8 @@
         "@teoclub/harness-code-runtime": "*",
         "@teoclub/harness-invariants": "*",
         "@teoclub/harness-llm": "*",
+        "@teoclub/harness-sandbox": "*",
+        "@teoclub/harness-sandbox-policy": "*",
         "@teoclub/harness-scope": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-system-prompt": "*",
@@ -501,12 +579,10 @@
       "name": "@teoclub/harness-typert-registry",
       "version": "0.1.0",
       "dependencies": {
-        "@teoclub/harness-protocol": "workspace:*",
         "zod": "^4.4.3",
       },
       "peerDependencies": {
         "@teoclub/cordis": "*",
-        "@teoclub/harness-invariants": "workspace:*",
       },
     },
     "packages/harness/user-approval": {
@@ -524,6 +600,13 @@
         "@teoclub/harness-scope": "*",
         "@teoclub/harness-session": "*",
         "@teoclub/harness-system-prompt": "*",
+      },
+    },
+    "packages/harness/values": {
+      "name": "@teoclub/harness-values",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@teoclub/cordis": "*",
       },
     },
     "packages/shared/actions": {
@@ -586,11 +669,16 @@
     "packages/work/context": {
       "name": "@teoclub/work-context",
       "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.4.3",
+      },
       "peerDependencies": {
         "@teoclub/cordis": "*",
+        "@teoclub/harness-agent": "*",
         "@teoclub/harness-context": "*",
         "@teoclub/harness-llm": "*",
         "@teoclub/harness-session": "*",
+        "@teoclub/harness-session-projection": "*",
         "@teoclub/shared-knowledge": "*",
       },
     },
@@ -948,6 +1036,8 @@
 
     "@teoclub/harness-app-boot": ["@teoclub/harness-app-boot@workspace:packages/harness/app-boot"],
 
+    "@teoclub/harness-atomic-write": ["@teoclub/harness-atomic-write@workspace:packages/harness/atomic-write"],
+
     "@teoclub/harness-attachment": ["@teoclub/harness-attachment@workspace:packages/harness/attachment"],
 
     "@teoclub/harness-brand": ["@teoclub/harness-brand@workspace:packages/harness/brand"],
@@ -955,6 +1045,8 @@
     "@teoclub/harness-code-runtime": ["@teoclub/harness-code-runtime@workspace:packages/harness/code-runtime"],
 
     "@teoclub/harness-context": ["@teoclub/harness-context@workspace:packages/harness/context"],
+
+    "@teoclub/harness-crypto": ["@teoclub/harness-crypto@workspace:packages/harness/crypto"],
 
     "@teoclub/harness-home-paths": ["@teoclub/harness-home-paths@workspace:packages/harness/home-paths"],
 
@@ -972,13 +1064,21 @@
 
     "@teoclub/harness-loop-protocol": ["@teoclub/harness-loop-protocol@workspace:packages/harness/loop-protocol"],
 
+    "@teoclub/harness-package-manifest": ["@teoclub/harness-package-manifest@workspace:packages/harness/package-manifest"],
+
     "@teoclub/harness-protocol": ["@teoclub/harness-protocol@workspace:packages/harness/protocol"],
+
+    "@teoclub/harness-sandbox": ["@teoclub/harness-sandbox@workspace:packages/harness/sandbox"],
+
+    "@teoclub/harness-sandbox-policy": ["@teoclub/harness-sandbox-policy@workspace:packages/harness/sandbox-policy"],
 
     "@teoclub/harness-scope": ["@teoclub/harness-scope@workspace:packages/harness/scope"],
 
     "@teoclub/harness-session": ["@teoclub/harness-session@workspace:packages/harness/session"],
 
     "@teoclub/harness-session-persistence": ["@teoclub/harness-session-persistence@workspace:packages/harness/session-persistence"],
+
+    "@teoclub/harness-session-projection": ["@teoclub/harness-session-projection@workspace:packages/harness/session-projection"],
 
     "@teoclub/harness-session-protocol": ["@teoclub/harness-session-protocol@workspace:packages/harness/session-protocol"],
 
@@ -995,6 +1095,8 @@
     "@teoclub/harness-typert-registry": ["@teoclub/harness-typert-registry@workspace:packages/harness/typert-registry"],
 
     "@teoclub/harness-user-approval": ["@teoclub/harness-user-approval@workspace:packages/harness/user-approval"],
+
+    "@teoclub/harness-values": ["@teoclub/harness-values@workspace:packages/harness/values"],
 
     "@teoclub/kit": ["@teoclub/kit@workspace:vendor/cordis/packages/kit"],
 
@@ -1236,6 +1338,24 @@
 
     "nanoid": ["nanoid@3.3.18", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w=="],
 
+    "node-addon-native-custom-loader": ["node-addon-native-custom-loader@0.1.6", "", {}, "sha512-QaW7d8lTcGCXrpNVyFDtID3vrpa7vFdpcY9pql2/9FGFSe7tcSnhQOKZX+1aOWq+pB1d2ZwNnKAdQI5nD9wAXA=="],
+
+    "node-addon-require-builtin": ["node-addon-require-builtin@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "optionalDependencies": { "node-addon-require-builtin-darwin-arm64": "0.1.6", "node-addon-require-builtin-darwin-x64": "0.1.6", "node-addon-require-builtin-linux-arm64-gnu": "0.1.6", "node-addon-require-builtin-linux-x64-gnu": "0.1.6", "node-addon-require-builtin-win32-arm64-msvc": "0.1.6", "node-addon-require-builtin-win32-ia32-msvc": "0.1.6", "node-addon-require-builtin-win32-x64-msvc": "0.1.6" } }, "sha512-P9ZGMDkloktirLJSggfpxsJ9jog5FItE1Omxpj50UBn3LhD6TS6/yx0jEBXsCGK3P9EtW1EpQVA1QL5gb11GaQ=="],
+
+    "node-addon-require-builtin-darwin-arm64": ["node-addon-require-builtin-darwin-arm64@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "darwin", "cpu": "arm64" }, "sha512-KpaAh0mDcIScoJs7gD/mjXREcENJ023/DgWW3GrlLXFVzCE6bK6wFrTFpNfnkxZZP8yWsEWOg1o5T+uQ7olgTQ=="],
+
+    "node-addon-require-builtin-darwin-x64": ["node-addon-require-builtin-darwin-x64@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "darwin", "cpu": "x64" }, "sha512-lh9o5rCvmkH8MZgBBmhyKzJRc1M1hJzgXLTFzB6iomRXNH9P1DKjN2nAJLmvGrdTij47Wcch1JVnlV5AG0cRCQ=="],
+
+    "node-addon-require-builtin-linux-arm64-gnu": ["node-addon-require-builtin-linux-arm64-gnu@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "linux", "cpu": "arm64" }, "sha512-DrQA3aS1LBn4NgrewbZkzSAWdSSRPD/fYO5AkQfvriQ/TQD3E2adB012sZ5eac6p9TAcTjUIYhk395AYVxo4Zw=="],
+
+    "node-addon-require-builtin-linux-x64-gnu": ["node-addon-require-builtin-linux-x64-gnu@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "linux", "cpu": "x64" }, "sha512-8wCxrFlB2Ld5DhxIm2P+nNFnQ0wjzDE5sXF68EUhLH0X+z313B07TUQFMBKCOkyhZIIBh590dBmhHCuA43No2A=="],
+
+    "node-addon-require-builtin-win32-arm64-msvc": ["node-addon-require-builtin-win32-arm64-msvc@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "win32", "cpu": "arm64" }, "sha512-NET6DiLnKrK2DHuO4NNN+zJz0CFas+RwpJlGY0d3A3A3tc5dJQqZXgw8DzLOn4cSTAQCaDq6+LbPyYX7jE2F3Q=="],
+
+    "node-addon-require-builtin-win32-ia32-msvc": ["node-addon-require-builtin-win32-ia32-msvc@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "win32", "cpu": "ia32" }, "sha512-oj4G51r81kJ3E2t5KknKhBNb8TmTWzc/t9x7jkBF9JeRd+1a0kr99mVJVYwJNxq9d3jpt7dgBdI8mxaomuXOEQ=="],
+
+    "node-addon-require-builtin-win32-x64-msvc": ["node-addon-require-builtin-win32-x64-msvc@0.1.6", "", { "dependencies": { "node-addon-native-custom-loader": "0.1.6" }, "os": "win32", "cpu": "x64" }, "sha512-ZQ+6thVzQBOFamW7s3t2YqHsw99EEPBNH1uAjvCx4QfnjFJTsu6I/H3prpN8i6cSt6gjnQtArfWc2LXN2ufcJQ=="],
+
     "obug": ["obug@2.1.4", "", {}, "sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA=="],
 
     "oxlint": ["oxlint@1.80.0", "", { "optionalDependencies": { "@oxlint/binding-android-arm-eabi": "1.80.0", "@oxlint/binding-android-arm64": "1.80.0", "@oxlint/binding-darwin-arm64": "1.80.0", "@oxlint/binding-darwin-x64": "1.80.0", "@oxlint/binding-freebsd-x64": "1.80.0", "@oxlint/binding-linux-arm-gnueabihf": "1.80.0", "@oxlint/binding-linux-arm-musleabihf": "1.80.0", "@oxlint/binding-linux-arm64-gnu": "1.80.0", "@oxlint/binding-linux-arm64-musl": "1.80.0", "@oxlint/binding-linux-ppc64-gnu": "1.80.0", "@oxlint/binding-linux-riscv64-gnu": "1.80.0", "@oxlint/binding-linux-riscv64-musl": "1.80.0", "@oxlint/binding-linux-s390x-gnu": "1.80.0", "@oxlint/binding-linux-x64-gnu": "1.80.0", "@oxlint/binding-linux-x64-musl": "1.80.0", "@oxlint/binding-openharmony-arm64": "1.80.0", "@oxlint/binding-win32-arm64-msvc": "1.80.0", "@oxlint/binding-win32-ia32-msvc": "1.80.0", "@oxlint/binding-win32-x64-msvc": "1.80.0" }, "peerDependencies": { "oxlint-tsgolint": ">=7.0.2001", "vite-plus": "*" }, "optionalPeers": ["oxlint-tsgolint", "vite-plus"], "bin": { "oxlint": "bin/oxlint" } }, "sha512-5nTiSps4qdbCWLbxzuO00alHkEO2exR9YMN/ig6QXWrLsYSG0KaObOAM+l6oU2LcKPWoSAGYbkZIGEu1ViiWKA=="],
@@ -1273,6 +1393,8 @@
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 
     "resolve-pkg-maps": ["resolve-pkg-maps@1.0.0", "", {}, "sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw=="],
+
+    "resolve.exports": ["resolve.exports@2.0.3", "", {}, "sha512-OcXjMsGdhL4XnbShKpAcSqPMzQoYkYyhbEaeSko47MjRP9NfEQMhZkXL1DoFlt9LWQn4YttrdnV6X2OiyzBi+A=="],
 
     "rolldown": ["rolldown@1.2.5", "", { "dependencies": { "@oxc-project/types": "=0.146.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm-eabi": "1.2.5", "@rolldown/binding-android-arm64": "1.2.5", "@rolldown/binding-darwin-arm64": "1.2.5", "@rolldown/binding-darwin-x64": "1.2.5", "@rolldown/binding-freebsd-x64": "1.2.5", "@rolldown/binding-linux-arm-gnueabihf": "1.2.5", "@rolldown/binding-linux-arm64-gnu": "1.2.5", "@rolldown/binding-linux-arm64-musl": "1.2.5", "@rolldown/binding-linux-ppc64-gnu": "1.2.5", "@rolldown/binding-linux-s390x-gnu": "1.2.5", "@rolldown/binding-linux-x64-gnu": "1.2.5", "@rolldown/binding-linux-x64-musl": "1.2.5", "@rolldown/binding-openharmony-arm64": "1.2.5", "@rolldown/binding-win32-arm64-msvc": "1.2.5", "@rolldown/binding-win32-x64-msvc": "1.2.5" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-VD2IE5PUG4Oj8zz2VGykiYd5wbnjdIiSsNQb8Qu5B+noEp+A78mu2iVvpp27g8es14Tk9rofNs5Tku9iQCS4fA=="],
 

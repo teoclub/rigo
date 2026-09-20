@@ -31,11 +31,12 @@ export default defineConfig({
     // (`--expose-internals`, not settable through NODE_OPTIONS). Forks
     // inherit these execArgv; worker threads would not.
     pool: 'forks',
-    // The upstream app-boot HMR suites assert fs.watch delivery within
-    // deadlines; unlimited fork parallelism starves those events under full
-    // load (flaky `HMR did not observe ...` timeouts that pass in
-    // isolation). A small fixed pool keeps the suite deterministic.
-    maxWorkers: 4,
+    // The upstream app-boot HMR suites assert fs.watch delivery within a 10s
+    // deadline; fork parallelism starves those events under load (flaky
+    // `HMR did not observe ...` timeouts that pass in isolation — reproduced
+    // at 4 workers, four clean runs at 2). The pool is the knob that fixes
+    // it: the suite costs ~3s more and stops failing at random.
+    maxWorkers: 2,
     minWorkers: 1,
     execArgv: ['--expose-internals'],
   },

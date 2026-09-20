@@ -2,7 +2,7 @@
 
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { Context } from '@teoclub/cordis'
-import { CallId } from '@teoclub/harness-llm'
+import { ToolCallId } from '@teoclub/harness-llm'
 import SystemPrompt from '@teoclub/harness-system-prompt'
 import ToolRuntime, {
   defineContentToolFixture,
@@ -21,7 +21,7 @@ async function setup() {
 }
 
 function exec(name: string, args: unknown): ToolExecutionInput {
-  return { signal: testToolSignal, callId: CallId('c1'), name, arguments: args }
+  return { signal: testToolSignal, callId: ToolCallId('c1'), name, arguments: args }
 }
 
 describe('ToolRuntime.executionMode', () => {

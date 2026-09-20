@@ -20,10 +20,10 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { PACKAGES } from './lib/baseline.ts'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 let failures = 0
 
 function fail(message: string): void {
@@ -37,13 +37,22 @@ function ok(message: string): void {
 
 /** Every workspace member name, from the root workspaces + vendor entries. */
 const registered = new Set(PACKAGES.map((p) => p.localPackage))
+/**
+ * Every workspace member's directory, by package name. The migration manifest
+ * covers only the PORTED packages; this is what lets the artifact checks below
+ * reach Rigo's own packages too, which ship through the same workspace.
+ */
+const localPackages = new Map<string, string>()
 {
   const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { workspaces?: string[] }
   const readName = (manifestPath: string): void => {
     if (!existsSync(manifestPath)) return
     try {
       const name = (JSON.parse(readFileSync(manifestPath, 'utf8')) as { name?: string }).name
-      if (name) registered.add(name)
+      if (name) {
+        registered.add(name)
+        localPackages.set(name, dirname(manifestPath))
+      }
     } catch {
       // unreadable manifests are reported per-package below
     }
@@ -57,6 +66,52 @@ const registered = new Set(PACKAGES.map((p) => p.localPackage))
     for (const entry of readdirSync(join(root, literal), { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
       readName(join(root, literal, entry.name, 'package.json'))
+    }
+  }
+}
+
+/**
+ * The artifact promises a package makes about itself, checked against the
+ * built tree: every `files` entry it ships and every fixed `exports` target it
+ * advertises must exist. A `default` naming a bundle nothing emits is a broken
+ * import for every consumer, and it stays silent until one of them loads it.
+ *
+ * Deliberately independent of the migration manifest: these hold for ANY
+ * workspace package, ported or not. The manifest loop below adds the port's own
+ * requirements (license, provenance, a non-empty `files`) on top.
+ * @param label - the package name used in failure messages.
+ * @param pkgPath - the package directory.
+ * @param manifest - its parsed package.json.
+ * @param requireFiles - whether a missing `files` list is itself a failure.
+ */
+function checkArtifacts(
+  label: string,
+  pkgPath: string,
+  manifest: Record<string, unknown>,
+  requireFiles: boolean,
+): void {
+  const files = Array.isArray(manifest.files) ? manifest.files as string[] : []
+  if (requireFiles && files.length === 0) fail(`${label}: no files list (nothing shippable declared)`)
+  for (const entry of files) {
+    if (typeof entry !== 'string') continue
+    // Glob entries end in wildcards; check the longest literal prefix exists.
+    const literal = entry.split('*')[0]!
+    const target = join(pkgPath, literal)
+    if (literal && !existsSync(target)) {
+      fail(`${label}: declared files entry "${entry}" does not exist after the build (run bun run build?)`)
+    }
+  }
+
+  const exportsField = manifest.exports
+  if (typeof exportsField !== 'object' || exportsField === null) return
+  for (const [key, value] of Object.entries(exportsField as Record<string, unknown>)) {
+    // `./src/*` and friends are wildcard passthroughs with no fixed target.
+    if (key.includes('*') || typeof value !== 'object' || value === null) continue
+    for (const [condition, target] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof target !== 'string' || target.includes('*')) continue
+      if (!existsSync(join(pkgPath, target))) {
+        fail(`${label}: exports["${key}"].${condition} -> ${target} does not exist`)
+      }
     }
   }
 }
@@ -77,7 +132,7 @@ for (const row of PACKAGES) {
   if (!existsSync(join(pkgPath, 'LICENSE'))) fail(`${row.localPackage}: LICENSE file missing from the release root`)
 
   // Provenance block.
-  const source = manifest.teoclub?.source as Record<string, unknown> | undefined
+  const source = (manifest.teoclub as { source?: Record<string, unknown> } | undefined)?.source
   const expectedSource: Record<string, string> = {
     repository: 'deepseek-ai/deepseek-harness',
     path: row.upstreamPath,
@@ -97,18 +152,7 @@ for (const row of PACKAGES) {
     fail(`${row.localPackage}: teoclub.source.upstreamVersion is missing`)
   }
 
-  // Every declared files entry exists after the build.
-  const files = Array.isArray(manifest.files) ? manifest.files as string[] : []
-  if (files.length === 0) fail(`${row.localPackage}: no files list (nothing shippable declared)`)
-  for (const entry of files) {
-    if (typeof entry !== 'string') continue
-    // Glob entries end in wildcards; check the longest literal prefix exists.
-    const literal = entry.split('*')[0]!
-    const target = join(pkgPath, literal)
-    if (literal && !existsSync(target)) {
-      fail(`${row.localPackage}: declared files entry "${entry}" does not exist after the build (run bun run build?)`)
-    }
-  }
+  checkArtifacts(row.localPackage, pkgPath, manifest, true)
 
   // No dependency may reference an unregistered @teoclub package.
   for (const deps of [manifest.dependencies, manifest.peerDependencies]) {
@@ -122,6 +166,36 @@ for (const row of PACKAGES) {
 
   ok(`${row.localPackage}: license + provenance + artifacts verified`)
 }
+
+// Rigo's OWN packages ship through the same workspace and make the same kind
+// of artifact promises, but the migration manifest does not list them, so
+// nothing above ever looked at them. That is how a package can advertise
+// `exports.default = ./lib/index.js` that no build produces — or serve a
+// month-old bundle — while every gate stays green.
+const portedPaths = new Set(PACKAGES.map((row) => row.localPath))
+let localChecked = 0
+for (const [name, pkgPath] of [...localPackages].sort(([a], [b]) => a.localeCompare(b))) {
+  if ([...portedPaths].some((ported) => join(root, ported) === pkgPath)) continue
+  const manifestPath = join(pkgPath, 'package.json')
+  let manifest: Record<string, unknown>
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  } catch (error) {
+    fail(`${name}: package.json unreadable (${String(error)})`)
+    continue
+  }
+  checkArtifacts(name, pkgPath, manifest, false)
+  for (const deps of [manifest.dependencies, manifest.peerDependencies]) {
+    if (typeof deps !== 'object' || deps === null) continue
+    for (const dependency of Object.keys(deps as Record<string, unknown>)) {
+      if (dependency.startsWith('@teoclub/') && !registered.has(dependency)) {
+        fail(`${name}: depends on unregistered workspace package ${dependency}`)
+      }
+    }
+  }
+  localChecked += 1
+}
+ok(`${localChecked} local (non-ported) packages: declared artifacts and workspace deps verified`)
 
 console.log('')
 if (failures > 0) {

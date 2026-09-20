@@ -1,18 +1,18 @@
 /**
  * Package-owned relational invariants for the session event log. Load this
- * companion beside `@deepseek-ai/dsh-invariants` to enable the checks.
+ * companion beside `@teoclub/harness-invariants` to enable the checks.
  *
- * @module @deepseek-ai/dsh-session/invariant
+ * @module @teoclub/harness-session/invariant
  */
 
 import type { Context } from '@teoclub/cordis'
-import { assertNever } from '@teoclub/harness-llm'
-import type { CallId } from '@teoclub/harness-llm'
+import type { ToolCallId } from '@teoclub/harness-llm'
 import type { InvariantFailure, InvariantInstaller } from '@teoclub/harness-invariants'
-import type { Session, SessionEvent } from '@teoclub/harness-session'
+import type { Session, SessionEvent, SessionSeqCursor } from '@teoclub/harness-session'
+import { assertNever } from '@teoclub/harness-values'
 import { TOOL_NOT_STARTED } from './repair.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-session'
+const PACKAGE_NAME = '@teoclub/harness-session'
 
 /** Cordis companion plugin name. */
 export const name = 'session-invariant'
@@ -21,12 +21,12 @@ export const inject = ['invariants']
 
 /** Per-session bookkeeping for relational log checks. */
 interface SessionTrace {
-  lastSeq: number
+  lastSeq: SessionSeqCursor
   openTurn: number | null
   openStep: number | null
   nextTurn: number
   nextStep: number
-  pendingCalls: Set<CallId>
+  pendingCalls: Set<ToolCallId>
 }
 
 /** One accepted event's deferred mutation of a committed session trace. */
@@ -34,7 +34,7 @@ interface SessionTraceTransition {
   scalars: Pick<SessionTrace, 'lastSeq' | 'openTurn' | 'openStep' | 'nextTurn' | 'nextStep'>
   pendingCalls:
     | { kind: 'none' }
-    | { kind: 'add' | 'delete'; callId: CallId }
+    | { kind: 'add' | 'delete'; callId: ToolCallId }
     | { kind: 'clear' }
 }
 
@@ -111,8 +111,8 @@ function validateEvent(
       nextStep += 1
       break
     }
-    case 'assistant/chunk': {
-      requireOpenStep(trace, 'assistant/chunk', event.data.turn, event.data.step, fail)
+    case 'assistant/attempt': {
+      requireOpenStep(trace, 'assistant/attempt', event.data.turn, event.data.step, fail)
       break
     }
     case 'assistant/message': {
@@ -142,12 +142,15 @@ function validateEvent(
       pendingCalls = { kind: 'delete', callId }
       break
     }
+    case 'system/message': {
+      requireOpenStep(trace, 'system/message', event.data.turn, event.data.step, fail)
+      break
+    }
     case 'user/message':
       break
     case 'session/end-seed':
       // Unconstrained: an unbalanced seed legally puts it inside an open turn.
       break
-    case 'todo/write':
     case 'request/header':
     case 'request/context': {
       if (trace.openTurn === null) {
@@ -207,7 +210,8 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   const seedSession = (session: Session): SessionTrace => {
     const trace = freshTrace()
     traces.set(session, trace)
-    for (const event of session.events) {
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
+    for (const event of session.snapshotEvents()) {
       applyTransition(trace, validateEvent(trace, event, fail))
     }
     return trace

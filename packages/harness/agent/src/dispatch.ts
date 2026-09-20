@@ -3,14 +3,14 @@
  * {@link agentEvents} couples the agent subject to its scope carrier, so the
  * scope key and the payload's `agent` cannot diverge; repeat dispatchers (the
  * loop driver) build it once in the agent's constructor and reuse it.
- * @module @deepseek-ai/dsh-agent/dispatch
+ * @module @teoclub/harness-agent/dispatch
  */
 
 import type { Context, Events } from '@teoclub/cordis'
 import { scopeTarget } from '@teoclub/harness-scope'
 import type { Scoped } from '@teoclub/harness-scope'
 import type { AssembleContext } from '@teoclub/harness-system-prompt'
-import type { Agent } from './runtime-types.ts'
+import type { Agent } from './types.ts'
 
 /** Extract the parameter tuple from an event handler type (its `this` is not part of the tuple). */
 type Params<F> = F extends (...args: infer P) => unknown ? P : never

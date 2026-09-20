@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { request as httpRequest } from 'node:http'
 import { Context } from '@teoclub/cordis'
-import { SessionStore, SessionId } from '@teoclub/harness-session'
+import { SESSION_FORMAT_VERSION, SessionStore, SessionId } from '@teoclub/harness-session'
 import { RuntimeFacade } from '@teoclub/api-sdk'
 import { createApiServer } from '@teoclub/api-http'
 
@@ -58,7 +58,9 @@ describe.skipIf(isBun)('approval/audit http api (Node)', async () => {
     const driver = new (m().NodeSqliteDriver)(path)
     m().runMigrations(driver, { migrations: COMPOSED() })
     driver.run(
-      "INSERT INTO sessions (id, status, metadata_json, created_at, updated_at) VALUES ('session_approval', 'active', '{}', 'now', 'now')",
+      // A stored row must carry a valid header: the durable read validates the
+      // stored id and format version, so an empty metadata object is refused.
+      `INSERT INTO sessions (id, status, metadata_json, created_at, updated_at) VALUES ('session_approval', 'active', '${JSON.stringify({ version: SESSION_FORMAT_VERSION, id: 'session_approval', createdAt: 0, isSeeded: false, cwd: '/tmp/ws' })}', 'now', 'now')`,
     )
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -79,7 +81,18 @@ describe.skipIf(isBun)('approval/audit http api (Node)', async () => {
       reason: 'policy requires approval',
       policy: 'strict-policy',
     }))
-    const facade = new RuntimeFacade(ctx)
+    const facade = new RuntimeFacade(ctx, {
+      // The audit view is a full-history derivation, so the facade reads the
+      // durable suffix (draining pending writes first) rather than the live log.
+      readSessionFrom: async (id, fromSeq) => {
+        try {
+          const suffix = await ctx.sessionPersistence.readFromDurable(SessionId(id), fromSeq)
+          return { events: [...suffix.events] }
+        } catch {
+          return undefined
+        }
+      },
+    })
     const api = createApiServer({ facade })
     const port = await api.listen(0)
     const base = `http://127.0.0.1:${port}`
@@ -167,7 +180,7 @@ describe.skipIf(isBun)('approval/audit http api (Node)', async () => {
         execution: { status: 'completed', executionId },
       })
       // The action completion events are in the session log (SSE-visible).
-      const events = h.ctx.sessions.get(SessionId('session_approval'))!.events
+      const events = h.ctx.sessions.get(SessionId('session_approval'))!.snapshotEvents()
       expect(events.some((event) => event.type === 'approval/requested')).toBe(true)
       expect(events.some((event) => event.type === 'approval/resolved')).toBe(true)
     } finally {
@@ -261,7 +274,7 @@ describe.skipIf(isBun)('approval/audit http api (Node)', async () => {
       const projection = await getJson(h.base, '/api/v1/sessions/session_approval/audit')
       expect(projection.status).toBe(200)
       const entries = (projection.body as { entries: { seq: number; category: string }[] }).entries
-      expect(entries.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+      expect(entries.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
       expect(entries.some((entry) => entry.category === 'turn')).toBe(true)
       const missing = await getJson(h.base, '/api/v1/sessions/session_ghost/audit')
       expect(missing.status).toBe(404)

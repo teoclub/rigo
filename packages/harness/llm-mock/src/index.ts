@@ -9,7 +9,7 @@
  * @module @teoclub/harness-llm-mock
  */
 import type { GenerateOptions, LlmModelReasoningInfo, LlmResolvedModelInfo, StreamChunk } from '@teoclub/harness-llm'
-import { CallId, LlmAdapter } from '@teoclub/harness-llm'
+import { ToolCallId, LlmAdapter } from '@teoclub/harness-llm'
 
 /** Helpers to write scripted responses tersely. */
 export function textResponse(text: string): StreamChunk[] {
@@ -38,7 +38,7 @@ export function maxTokensResponse(text: string): StreamChunk[] {
 }
 
 export function toolCallResponse(rawCallId: string, name: string, args: object, text?: string): StreamChunk[] {
-  const callId = CallId(rawCallId)
+  const callId = ToolCallId(rawCallId)
   const argumentsJson = JSON.stringify(args)
   const chunks: StreamChunk[] = []
   let index = 0

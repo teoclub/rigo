@@ -25,7 +25,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { BASELINE, LOCAL_PACKAGES, PACKAGES, rewriteProse, rewriteTextTokens, rewriteTypeScript, type PackageSpec } from './lib/baseline.ts'
 
@@ -35,7 +35,7 @@ if (!clone) {
   process.exit(1)
 }
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 
 function gitShow(path: string): string {
   return execFileSync('git', ['-C', clone, 'show', `${BASELINE.commit}:${path}`], { encoding: 'utf8' })
@@ -73,6 +73,12 @@ function srcFaceFor(exportPath: string): string {
  * Add the "development" condition (source) to every exports entry and ensure
  * `./src/*` is exported, so workspace-internal resolution reaches SOURCE in
  * dev runtimes while production consumers keep the built lib.
+ *
+ * An entry whose `types` face is not under `./lib/types/` is not backed by a
+ * source file at all: upstream's Typert codegen synthesizes it during the
+ * build, and Rigo does not port that generator. Such an entry is dropped
+ * rather than emitted, because neither its `development` nor its `default`
+ * target would ever exist here.
  */
 function addDevelopmentConditions(exports: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -84,7 +90,15 @@ function addDevelopmentConditions(exports: Record<string, unknown>): Record<stri
     const entry = value as Record<string, string>
     const defaultPath = entry['default'] ?? ''
     const typesPath = entry['types']
-    const srcPath = defaultPath.startsWith('./lib/') ? srcFaceFor(defaultPath) : undefined
+    if (typesPath !== undefined && !typesPath.startsWith('./lib/types/')) continue
+    // A bundle name can differ from its source file (app-boot's worker bundle
+    // is `lib/worker/profile-resolution-bootstrap.js` built from
+    // `src/profile-resolution/worker-bootstrap.ts`), so the `types` face —
+    // which upstream writes by hand and which the port copies verbatim beside
+    // the ported sources — is the reliable source path when it exists.
+    const srcPath = typesPath?.startsWith('./lib/types/') === true
+      ? srcFaceFor(typesPath)
+      : defaultPath.startsWith('./lib/') ? srcFaceFor(defaultPath) : undefined
     out[key] = {
       ...(srcPath === undefined || srcPath === defaultPath ? {} : { development: srcPath }),
       ...(typesPath === undefined ? {} : { types: typesPath }),
@@ -104,10 +118,11 @@ function computeDeps(spec: PackageSpec, files: string[], localTexts: string[] = 
   ]
   for (const text of texts) {
     for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+      const specifier = m[1]!
       // Local-only ADAPT modules import the LOCAL package names directly.
       const mapped = [...PACKAGES].find(
-        (p) => m[1] === p.upstreamPackage || m[1].startsWith(p.upstreamPackage + '/')
-          || m[1] === p.localPackage || m[1].startsWith(p.localPackage + '/'),
+        (p) => specifier === p.upstreamPackage || specifier.startsWith(p.upstreamPackage + '/')
+          || specifier === p.localPackage || specifier.startsWith(p.localPackage + '/'),
       )
       if (mapped && mapped.localPackage !== spec.localPackage) harness.add(mapped.localPackage)
       const cordisPkg = CORDIS_PACKAGES.find((c) => m[1] === c.upstreamName || m[1] === c.name)
@@ -144,6 +159,12 @@ const CORDIS_PACKAGES = [
  * rather than a deletion a re-port would silently undo.
  */
 const NOT_PORTED_TESTS: { file: string; reason: string }[] = [
+  { file: 'packages/core/agent-loop/tests/system-prompt-admission.spec.ts', reason: 'imports @deepseek-ai/dsh-llm-pi-ai, a provider outside the migration closure' },
+  { file: 'packages/core/agent-loop/tests/serial-listener-review.spec.ts', reason: 'imports the agent-loop testkit, jsonl persistence and the subagent family — none ported' },
+  { file: 'packages/core/agent-loop/tests/request-cache.e2e.ts', reason: 'imports @deepseek-ai/dsh-llm-deepseek, replaced by the OpenAI-compatible provider (PRD D-003/D-004)' },
+  { file: 'packages/core/agent-loop/tests/request-freeze.spec.ts', reason: 'imports the agent-loop testkit, which is not ported' },
+  { file: 'packages/core/agent-loop/tests/shutdown-drain.spec.ts', reason: 'imports the dropped jsonl persistence provider (PRD D-003)' },
+
   { file: 'packages/core/tools/tests/gen-tool-catalog.spec.ts', reason: 'harvests the tool schemas of every upstream tool package; most are outside the migration closure' },
   { file: 'packages/core/agent/tests/verify-export-jsdoc.spec.ts', reason: 'audits upstream repo-wide export JSDoc conventions' },
   { file: 'packages/core/session/tests/gen-persistence-catalog.spec.ts', reason: 'snapshots the upstream persistence-package catalog; most entries are outside the migration closure' },
@@ -185,6 +206,32 @@ const ADAPTED_TESTS: {
   substitutions: { find: RegExp; replace: string | ((...args: string[]) => string); description: string }[]
 }[] = [
   {
+    file: 'packages/core/session/tests/canonical-envelopes.spec.ts',
+    reason: 'hand-maintained: records the canonical surface-op key pair (`startSeq`/`endSeq`) alongside the noncanonical spellings the validator must refuse',
+    substitutions: [],
+  },
+  {
+    file: 'packages/session/session-persistence/tests/contract.ts',
+    reason: 'hand-maintained: the ported storage contract plus Rigo\'s `appendLog` fixture helper, which the local coordinator and write-behind suites drive live sessions through',
+    substitutions: [],
+  },
+  {
+    file: 'packages/boot/app-boot/tests/profile-resolution-worker-bootstrap.spec.ts',
+    reason: 'hand-maintained: the test reaches the package source through its public `src/*` export instead of upstream\'s in-package `../src/` path, which does not exist in the mirrored tests/upstream layout',
+    substitutions: [],
+  },
+  {
+    file: 'packages/runtime-diagnostics/invariants/tests/service.spec.ts',
+    reason: 'the blocklist-precedence case pairs a package-name pattern with the packages it must match, and the pattern is a REGEX PREFIX (`^@deepseek-ai/dsh-`), which no whole-token rewrite can see. Left as-is the allowlist matches nothing and the case passes for the wrong reason, so the pattern is repointed at the names this repo actually registers. The other upstream spellings in this file are opaque probe names the cases never match against a real package, and stay as written',
+    substitutions: [
+      {
+        find: /package_allowlist: \['\^@deepseek-ai\/dsh-'\]/,
+        replace: "package_allowlist: ['^@teoclub/harness-']",
+        description: 'repoint the prefix pattern at the local package names',
+      },
+    ],
+  },
+  {
     file: 'packages/core/agent-loop/tests/config-session-id.spec.ts',
     reason: 'uses the dropped JSONL persistence provider (PRD D-003: SQLite is Rigo\'s only shipped provider); the root-keyed in-memory MemoryPersistence keeps the reload-survival semantics under test',
     substitutions: [
@@ -201,6 +248,27 @@ const ADAPTED_TESTS: {
     ],
   },
   {
+    file: 'packages/core/agent-loop/tests/resume.spec.ts',
+    reason: 'three cases assert the dropped JSONL provider\'s OWN physical internals, not the persistence seam: two reach into its `tracker.openHandles` set to swap a live handle\'s `close`, and one tears the on-disk `.jsonl` artifact to build a corrupt tail. Rigo ships SQLite and the in-memory double, neither of which has a per-session handle registry or a torn JSONL line to manufacture — the coordinator contract already documents the same limit for memory stores (`expect(fix.corruptTail).toBeUndefined()`), so these are skipped rather than silently passing',
+    substitutions: [
+      {
+        find: /(it\('a rejecting final writer close releases the registries, then rejects disposal')/,
+        replace: (_m: string, opener: string) => `it.skip(${opener.slice(3)}`,
+        description: 'skip the JSONL handle-registry case',
+      },
+      {
+        find: /(it\('combines a machine-teardown failure with a close failure into one rejection')/,
+        replace: (_m: string, opener: string) => `it.skip(${opener.slice(3)}`,
+        description: 'skip the JSONL handle-registry case',
+      },
+      {
+        find: /(it\('resume over a torn physical tail continues from the committed prefix')/,
+        replace: (_m: string, opener: string) => `it.skip(${opener.slice(3)}`,
+        description: 'skip the torn-JSONL-artifact case',
+      },
+    ],
+  },
+  {
     file: 'packages/llm/llm/tests/attribution.spec.ts',
     reason: 'reads the upstream package manifest relative to the test location; after the move to tests/upstream/ it must point into the ported package directory',
     substitutions: [
@@ -213,9 +281,25 @@ const ADAPTED_TESTS: {
     substitutions: [
       {
         find: /const rejection = expect\(promptly\((\w+)\)\)\.rejects\.toThrow\(([^)]*)\)/g,
-        replace: (match: string, subject: string, matcher: string) => matcher.trim()
+        replace: (_match: string, subject: string, matcher: string) => matcher.trim()
           ? `const rejection = promptly(${subject}).then(() => { throw new Error('expected resume rejection') }, (error: unknown) => expect(error instanceof Error ? error.message : String(error)).toMatch(${matcher.trim()}))`
           : `const rejection = promptly(${subject}).then(() => { throw new Error('expected resume rejection') }, () => undefined)`,
+        description: 'lazy rejection assertion (register-then-trigger) instead of bun-eager .rejects',
+      },
+    ],
+  },
+  {
+    file: 'packages/core/agent-loop/tests/scope-lifecycle.spec.ts',
+    reason: 'bun\'s expect().rejects evaluates the subject promise EAGERLY, so the register-then-trigger shape (hold the assertion, await it after the trigger) deadlocks the whole run — bun never returns from the assertion to fire the trigger, and the process spins instead of failing. The lazy then-form settles identically in both runtimes and asserts the same message',
+    substitutions: [
+      {
+        find: /const rejected = expect\(creating\)\.rejects\.toThrow\('owner disposed during setup'\)/,
+        replace: [
+          "const rejected = Promise.resolve(creating).then(",
+          "      () => { throw new Error('expected creation rejection') },",
+          "      (error: unknown) => expect(error instanceof Error ? error.message : String(error)).toMatch('owner disposed during setup'),",
+          "    )",
+        ].join('\n'),
         description: 'lazy rejection assertion (register-then-trigger) instead of bun-eager .rejects',
       },
     ],
@@ -292,9 +376,33 @@ const BUN_SKIPPED_TESTS: { file: string; itOpener: string; reason: string }[] = 
     reason: 'asserts alias-to-cache identity through ctx.loader.internal.loadCache, which requires Node\'s internal module loader (--expose-internals); bun has no ModuleLoader.fromInternal()',
   },
   {
+    file: 'packages/boot/app-boot/tests/loader-shape.compat.spec.ts',
+    itOpener: "it('tags the running Node loader with the resolver signature that runtime accepts', async () => {",
+    reason: 'asserts ctx.loader.internal is present and resolvable, which requires Node\'s internal module loader (--expose-internals); bun has no ModuleLoader.fromInternal()',
+  },
+  {
     file: 'packages/boot/app-boot/tests/app-boot.spec.ts',
     itOpener: "it('can resolve bare plugins from the harness when the config project shadows their package name', async () => {",
     reason: 'bare plugin names resolve through ctx.loader.internal.import(baseUrl), which requires Node\'s internal module loader; without it bun resolves bare specifiers from the loader module location and cannot see the config-project node_modules shadow',
+  },
+]
+
+/**
+ * Suites that structurally require Node's internal module loader as a whole:
+ * every case reaches the same `node-addon-require-builtin` bridge, so the
+ * whole describe is marked with `skipIf` under bun instead of each case. The
+ * helper evaluates to false under vitest, so the suite still runs there.
+ */
+const BUN_SKIPPED_SUITES: { file: string; describeOpener: string; reason: string }[] = [
+  {
+    file: 'packages/boot/app-boot/tests/profile-resolution.spec.ts',
+    describeOpener: "describe('profile resolution generation', { concurrent: false }, () => {",
+    reason: 'every case drives profile resolution through the CommonJS/ESM require hooks built on `internal/modules/esm/loader` via node-addon-require-builtin, which needs Node\'s internal module loader (--expose-internals); under bun the addon cannot resolve those builtins at all',
+  },
+  {
+    file: 'packages/boot/app-boot/tests/profile-resolution-service.spec.ts',
+    describeOpener: "describe('profile package metadata service', () => {",
+    reason: 'every case drives profile resolution through the CommonJS/ESM require hooks built on `internal/modules/esm/loader` via node-addon-require-builtin, which needs Node\'s internal module loader (--expose-internals); under bun the addon cannot resolve those builtins at all',
   },
 ]
 
@@ -346,7 +454,7 @@ const BUN_POLYFILL_TESTS = [
   'packages/core/agent-loop/tests/config-session-id.spec.ts',
   'packages/core/agent-loop/tests/resume.spec.ts',
   'packages/core/agent-loop/tests/scope-lifecycle.spec.ts',
-  'packages/core/tools/tests/code-mode.spec.ts',
+  'packages/util/crypto/tests/uuid.spec.ts',
 ]
 
 /**
@@ -435,12 +543,16 @@ interface PortRecord {
 }
 
 /**
- * Rewrite one ported SOURCE file (specifier rename only). Shared with
- * scripts/audit-source.ts, which re-derives KEEP files to verify they stay
- * rewrite-identical to the pinned upstream.
+ * Rewrite one ported SOURCE file: import specifiers through the AST channel,
+ * then every remaining quoted package token through the text channel (an
+ * invariant's `PACKAGE_NAME`, a typert key, a doc `{@link}` target). Shared
+ * with scripts/audit-source.ts, which re-derives KEEP files to verify they
+ * stay rewrite-identical to the pinned upstream.
  */
 export function portSourceFile(upstreamFile: string, text: string): { text: string; edits: number } {
-  return rewriteFile(upstreamFile, text)
+  const specifiers = rewriteFile(upstreamFile, text)
+  const tokens = rewriteTextTokens(specifiers.text)
+  return { text: tokens.text, edits: specifiers.edits + tokens.edits }
 }
 
 export interface PortedTestFile {
@@ -494,9 +606,19 @@ export function portTestFile(
         `${spec.upstreamPath}/${rel}: declared adaptation "${sub.description}" no longer matches the upstream text`,
       )
     }
-    rewritten.text = rewritten.text.replace(sub.find, typeof sub.replace === 'function' ? sub.replace as (...a: string[]) => string : sub.replace)
+    // Branch instead of a ternary: String.replace's overloads cannot resolve
+    // against the union, and the wrapper keeps the callback's extra capture
+    // groups (`$1`, …) flowing through unchanged.
+    const substitute = sub.replace
+    rewritten.text = typeof substitute === 'function'
+      ? rewritten.text.replace(sub.find, (substring: string, ...args: string[]) => substitute(substring, ...args))
+      : rewritten.text.replace(sub.find, substitute)
     appliedSubstitutions.push(sub.description)
   }
+  // Token rename runs AFTER the substitutions, whose `find` patterns are
+  // authored against the upstream text and would stop matching a stream that
+  // had already been renamed.
+  rewritten.text = rewriteTextTokens(rewritten.text).text
   // Bun polyfill for vitest APIs bun:test lacks (vi.waitFor/stubEnv).
   // Path from tests/upstream/<name>/<rel> back to repo root is
   // two levels plus the depth of rel itself.
@@ -514,6 +636,18 @@ export function portTestFile(
     }
     const marked = bunSkip.itOpener.replace(/^it\(/, 'it.skipIf(RIGO_REQUIRES_NODE_INTERNALS)(')
     rewritten.text = rewritten.text.replace(bunSkip.itOpener, marked)
+    rewritten.text = `const RIGO_REQUIRES_NODE_INTERNALS = typeof Bun !== 'undefined'\n${rewritten.text}`
+  }
+  // A whole SUITE built on Node's internal loader needs the same treatment at
+  // the describe() boundary: marking every case individually would repeat the
+  // same declaration dozens of times and drift the moment upstream adds one.
+  const bunSkipSuite = BUN_SKIPPED_SUITES.find((t) => t.file === `${spec.upstreamPath}/${rel}`)
+  if (bunSkipSuite) {
+    if (!rewritten.text.includes(bunSkipSuite.describeOpener)) {
+      throw new Error(`BUN_SKIPPED_SUITES opener not found in ${bunSkipSuite.file}: ${bunSkipSuite.describeOpener}`)
+    }
+    const marked = bunSkipSuite.describeOpener.replace(/^describe\(/, 'describe.skipIf(RIGO_REQUIRES_NODE_INTERNALS)(')
+    rewritten.text = rewritten.text.replace(bunSkipSuite.describeOpener, marked)
     rewritten.text = `const RIGO_REQUIRES_NODE_INTERNALS = typeof Bun !== 'undefined'\n${rewritten.text}`
   }
   // Bun's expect().rejects/.resolves only accept native Promises, while
@@ -596,8 +730,17 @@ async function main() {
     }
     for (const file of preservedLocal) {
       await mkdir(dirname(join(dest, file.rel)), { recursive: true })
-      await writeFile(join(dest, file.rel), file.content)
-      console.log(`  preserved local source ${file.rel} (ADAPT)`)
+      // Preserved local sources are rewritten for SPECIFIERS but not prose.
+      // A preserved file is the previous run's output plus hand edits, so an
+      // upstream package the previous run did not yet know about survives in
+      // its original `@deepseek-ai/` spelling; without this rewrite the next
+      // run preserves that stale specifier forever. Prose is skipped because
+      // these files are Rigo's own and their wording is not upstream's.
+      const specifiers = rewriteTypeScript(file.content, file.rel)
+      const tokens = rewriteTextTokens(specifiers.text)
+      specifierEdits += specifiers.edits + tokens.edits
+      await writeFile(join(dest, file.rel), tokens.text)
+      console.log(`  preserved local source ${file.rel} (ADAPT${specifiers.edits + tokens.edits ? `, ${specifiers.edits + tokens.edits} specifier edit(s)` : ''})`)
     }
 
     // Tests -> tests/upstream/<name>/.
@@ -626,6 +769,15 @@ async function main() {
     for (const upstreamFile of testFiles) {
       const rel = relative(spec.upstreamPath, upstreamFile)
       const ported = portTestFile(spec, upstreamFile, rel, gitShow(upstreamFile))
+      // A test that upstream kept inside its package resolves `../src/...`
+      // relative to `<upstreamPath>/tests/`. It lands here under
+      // tests/upstream/<name>/, one level further out, so the same specifier
+      // would point at a directory that does not exist — retarget it at the
+      // ported package's public `src/*` export instead.
+      ported.text = ported.text.replace(
+        /(['"])\.\.\/src\//g,
+        `$1${spec.localPackage}/src/`,
+      )
       if (ported.omitted) {
         omittedTests++
         continue
@@ -655,6 +807,21 @@ async function main() {
       await mkdir(dirname(join(testDest, rel)), { recursive: true })
       await writeFile(join(testDest, rel), content)
       appliedAdaptations.push({ file: rel, substitutions: [], reason: local.reason })
+      preservedTests++
+    }
+    // Catch-all for local test files the registry does not name. The wipe above
+    // is directory-wide, so without this every unregistered Rigo-authored test
+    // or test-support module under tests/upstream/<pkg>/ is destroyed and cannot
+    // be re-derived — the registry alone silently loses them. Anything upstream
+    // also ships was already written and is skipped by `writtenTests`.
+    for (const rel of onDisk.keys()) {
+      if (rel.startsWith('..') || writtenTests.has(rel)) continue
+      const content = onDisk.get(rel)
+      if (content === undefined) continue
+      if (existsSync(join(testDest, rel))) continue
+      await mkdir(dirname(join(testDest, rel)), { recursive: true })
+      await writeFile(join(testDest, rel), content)
+      console.log(`  kept local test file with no upstream counterpart: ${rel}`)
       preservedTests++
     }
     if (omittedTests) console.log(`  omitted ${omittedTests} test file(s) (see docs/harness-upstream-audit.json)`)
@@ -706,7 +873,21 @@ async function main() {
         : {}),
       // Upstream declares these as devDependencies; runtime deps live above.
       ...(upstreamPkg.devDependencies?.['@types/js-yaml'] ? { devDependencies: { '@types/js-yaml': upstreamPkg.devDependencies['@types/js-yaml'] } } : {}),
-      files: upstreamPkg.files ?? ['lib/index.js', 'lib/invariant.js', 'lib/types/**/*.d.ts'],
+      // Keep only the declared artifacts this repo actually builds. Upstream's
+      // list can name entry points whose SOURCE it no longer ships (the llm
+      // package still declares `lib/typert.host.js` with no `src/typert.host.ts`),
+      // and a `files` entry with nothing behind it fails verify-packages and
+      // advertises an export no consumer could import.
+      files: (upstreamPkg.files ?? ['lib/index.js', 'lib/invariant.js', 'lib/types/**/*.d.ts'])
+        .filter((entry: string) => {
+          // Globs describe a directory of build output, not one source file.
+          if (entry.includes('*')) return true
+          const source = entry
+            .replace(/^lib\//, `${spec.upstreamPath}/src/`)
+            .replace(/\.js$/, '.ts')
+            .replace(/\/worker\/([^/]+)$/, '/profile-resolution/worker-bootstrap.ts')
+          return gitList(spec.upstreamPath).some((file) => file === source || file.startsWith(source.replace(/\.ts$/, '')))
+        }),
     }
     await writeFile(join(dest, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
 
@@ -731,23 +912,47 @@ async function main() {
       ...(references.length ? { references } : {}),
     }, null, 2) + '\n')
 
-    // tsdown.config.ts: root + invariant companion (+ client entry for
-    // typert-registry). The client bundle uses the object-entry form so the
-    // output lands at lib/client.js, matching the upstream manifest's
-    // `exports["./client"]` target (the array form would name it lib/index.js
-    // and collide with the main entry).
-    const entries = ['lib/types/index.js']
-    if (srcFiles.includes(`${spec.upstreamPath}/src/invariant.ts`)) entries.push('lib/types/invariant.js')
-    const clientEntry = srcFiles.includes(`${spec.upstreamPath}/src/client/index.ts`)
-    const tsdownBlocks = clientEntry
-      ? [...entries, { client: 'src/client/index.ts' }]
-      : entries
-    await writeFile(join(dest, 'tsdown.config.ts'), `import { defineConfig } from 'tsdown'
+    // tsdown.config.ts. Upstream's workspace root builds every package the
+    // same way, so a package-local config exists ONLY where the shape departs
+    // from that default — an extra worker entry, or a `deps` pin that keeps a
+    // bundle's module identity. Those departures are load-bearing (app-boot's
+    // worker artifact is a declared `files` entry; scope's `neverBundle` keeps
+    // the invariant bundle on the root entry's carrier WeakMap), so a
+    // self-contained upstream config is ported verbatim rather than
+    // regenerated into the default shape. A config that pulls in a helper
+    // (the client bundler preset, which Rigo replaces wholesale) is not
+    // self-contained and falls back to the generated default below.
+    const upstreamTsdownPath = `${spec.upstreamPath}/tsdown.config.ts`
+    const upstreamTsdown = gitList(spec.upstreamPath).includes(upstreamTsdownPath)
+      ? gitShow(upstreamTsdownPath)
+      : undefined
+    const selfContainedTsdown = upstreamTsdown !== undefined
+      && !/from\s+['"]\.\.?\//.test(upstreamTsdown)
+      && !/defineConfig\(\s*\(/.test(upstreamTsdown)
+    if (selfContainedTsdown) {
+      // Both channels: the `deps.alwaysBundle`/`neverBundle` pins name packages
+      // as bare string literals, which only the text-token rewrite reaches.
+      const specifiers = rewriteTypeScript(upstreamTsdown, upstreamTsdownPath)
+      const tokens = rewriteTextTokens(specifiers.text)
+      await writeFile(join(dest, 'tsdown.config.ts'), tokens.text)
+    } else {
+      // Generated default: root + invariant companion (+ client entry for
+      // typert-registry). The client bundle uses the object-entry form so the
+      // output lands at lib/client.js, matching the upstream manifest's
+      // `exports["./client"]` target (the array form would name it lib/index.js
+      // and collide with the main entry), and the object key names the output
+      // because Rigo's client face is a plain ESM bundle, not a loader closure.
+      const entries: (string | Record<string, string>)[] = ['lib/types/index.js']
+      if (srcFiles.includes(`${spec.upstreamPath}/src/invariant.ts`)) entries.push('lib/types/invariant.js')
+      const tsdownBlocks = srcFiles.includes(`${spec.upstreamPath}/src/client/index.ts`)
+        ? [...entries, { client: 'src/client/index.ts' }]
+        : entries
+      await writeFile(join(dest, 'tsdown.config.ts'), `import { defineConfig } from 'tsdown'
 
 /** Ported build shape: each source entry becomes an independent ESM bundle. */
 export default defineConfig([${
-  tsdownBlocks
-    .map((entry) => `
+        tsdownBlocks
+          .map((entry) => `
   {
     entry: ${typeof entry === 'string' ? `['${entry}']` : JSON.stringify(entry)},
     outDir: 'lib',
@@ -758,8 +963,36 @@ export default defineConfig([${
     dts: false,
     clean: false,
   },`).join('')
-}])
+      }])
 `)
+    }
+
+    // A `files` entry that names a built artifact must have a build entry
+    // behind it, or the published manifest advertises output nothing emits.
+    // The generated default covers index/invariant/glob only, so any other
+    // declared artifact is checked against the config that was just written.
+    const declaredArtifacts = (pkg.files as string[]).filter(
+      (entry) => !entry.includes('*') && /^lib\/.+\.js$/.test(entry),
+    )
+    const writtenTsdown = await readFile(join(dest, 'tsdown.config.ts'), 'utf8')
+    for (const artifact of declaredArtifacts) {
+      const stem = artifact.replace(/^lib\//, '').replace(/\.js$/, '')
+      if (!writtenTsdown.includes(stem)) {
+        throw new Error(`${spec.localPackage}: ${artifact} is declared in "files" but the build config emits no entry for it`)
+      }
+    }
+
+    // Every `development` face must resolve. A wrong one is silent: the dev
+    // runtime that Rigo's workspace resolution uses would fail to import the
+    // package at all, far from the port that wrote the path.
+    for (const face of Object.values(pkg.exports ?? {})) {
+      if (typeof face !== 'object' || face === null) continue
+      const development = (face as Record<string, string>)['development']
+      if (development === undefined) continue
+      if (!existsSync(join(dest, development.replace(/^\.\//, '')))) {
+        throw new Error(`${spec.localPackage}: exports development face ${development} does not exist in the ported package`)
+      }
+    }
 
     records.push({
       localPackage: spec.localPackage,
@@ -832,7 +1065,7 @@ export default defineConfig([${
   // graph splits module-private symbols (Cordis scope keys) and breaks
   // scope-dependent behavior.
   const sortedPaths: Record<string, string[]> = {}
-  for (const key of Object.keys(paths).sort()) sortedPaths[key] = paths[key]
+  for (const key of Object.keys(paths).sort()) sortedPaths[key] = paths[key]!
   await writeFile(join(root, 'tsconfig.paths.json'), JSON.stringify({
     $comment: 'Generated by scripts/port-upstream.ts - do not edit by hand.',
     compilerOptions: { paths: sortedPaths },
@@ -911,7 +1144,7 @@ export default defineConfig([${
 function rewriteDepNames(deps: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {}
   const localPackages = new Set(PACKAGES.map((p) => p.localPackage))
-  const renameTable: [string, string][] = [
+  const renameTable: readonly (readonly [string, string])[] = [
     ...PACKAGES.map((p) => [p.upstreamPackage, p.localPackage] as const),
     ['@deepseek-ai/cordis', '@teoclub/cordis'],
     ['@deepseek-ai/cordis-plugin-loader', '@teoclub/cordis-plugin-loader'],
@@ -932,7 +1165,7 @@ function rewriteDepNames(deps: Record<string, string>): Record<string, string> {
         break
       }
     }
-    const range = deps[name]
+    const range = deps[name] ?? '*'
     // Only packages inside THIS workspace may use the workspace protocol;
     // the cordis family resolves from the sibling checkout via the root
     // dependency (file:), so those peers use an open range.

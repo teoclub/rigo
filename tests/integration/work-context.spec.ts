@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@teoclub/cordis'
 import { ContextService } from '@teoclub/harness-context'
-import { createUserMessage } from '@teoclub/harness-llm'
+import { createUserMessage, type UserMessage } from '@teoclub/harness-llm'
+import { SessionProjectionRegistry } from '@teoclub/harness-session-projection'
 import {
   KNOWN_SESSION_EVENT_TYPES,
   Session,
@@ -21,6 +22,8 @@ import {
 import { KnowledgeService, SourceId, type KnowledgeProvider, type KnowledgeResult } from '@teoclub/shared-knowledge'
 import {
   KNOWLEDGE_RETRIEVED_EVENT_TYPE,
+  lastClaimedUserQuery,
+  lastUserInputProjection,
   lastUserQuery,
   parseChunkLocator,
   WorkKnowledgeContributor,
@@ -33,6 +36,9 @@ function makeSession(id = 'session_work_ctx'): Session {
     version: SESSION_FORMAT_VERSION,
     id: SessionId(id),
     createdAt: Date.now(),
+    // Required since the 0.1.6 baseline; the exact prefix length is Session
+    // state (`inheritedEventCount`), not header metadata.
+    isSeeded: false,
   })
 }
 
@@ -88,10 +94,88 @@ describe('work knowledge contributor (Issue 020)', () => {
     expect(parseChunkLocator('"a string"')).toEqual({ chunk: undefined, location: undefined })
   })
 
+  // -------------------------------------------------------------------------
+  // Claimed input: the question the turn is answering, read from the
+  // `lastUserInput` PROJECTION rather than from the event log.
+  // -------------------------------------------------------------------------
+  describe('claimed user query (lastUserInput projection)', () => {
+    function withUnit(): SessionProjectionRegistry {
+      const ctx = new Context()
+      const projections = new SessionProjectionRegistry(ctx)
+      projections.register(lastUserInputProjection)
+      return projections
+    }
+
+    function bareRegistry(): SessionProjectionRegistry {
+      return new SessionProjectionRegistry(new Context())
+    }
+
+    function pending(text: string): UserMessage {
+      return createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
+    }
+
+    function splice(
+      session: Session,
+      target: 'next-turn' | 'next-step',
+      inserted: UserMessage[],
+      removedCount = 0,
+    ): void {
+      session.append('agent/inbox/spliced', { target, start: 0, removedCount, inserted })
+    }
+
+    it('answers from the claimed question even after the claim drains the inbox', () => {
+      const projections = withUnit()
+      const session = makeSession()
+      expect(lastClaimedUserQuery(projections, session)).toBeUndefined()
+
+      splice(session, 'next-turn', [pending('first question')])
+      expect(lastClaimedUserQuery(projections, session)).toBe('first question')
+
+      // Retrieval runs AFTER the loop claims the input, so the drain that
+      // empties the inbox must not erase the question being answered.
+      splice(session, 'next-turn', [], 1)
+      expect(lastClaimedUserQuery(projections, session)).toBe('first question')
+
+      // A later question becomes the new answer target.
+      splice(session, 'next-turn', [pending('second question')])
+      expect(lastClaimedUserQuery(projections, session)).toBe('second question')
+
+      // Mid-turn input (`next-step`) also counts: it is the newest user text.
+      splice(session, 'next-step', [pending('mid-turn input')])
+      expect(lastClaimedUserQuery(projections, session)).toBe('mid-turn input')
+    })
+
+    it('ignores insertions that are not user-sourced or carry no text', () => {
+      const projections = withUnit()
+      const session = makeSession()
+      splice(session, 'next-turn', [
+        createUserMessage({
+          content: [{ type: 'text', text: 'tool output' }],
+          source: { kind: 'tool', callId: 'call-1' },
+        }),
+        pending('   '),
+      ])
+      expect(lastClaimedUserQuery(projections, session)).toBeUndefined()
+    })
+
+    it('throws when the projection is not registered', () => {
+      const projections = bareRegistry()
+      const session = makeSession()
+      splice(session, 'next-turn', [pending('unreachable')])
+      // The mandatory projection seam: a missing key fails at first dependent
+      // access instead of degrading to a default.
+      expect(() => lastClaimedUserQuery(projections, session)).toThrow(/lastUserInput/)
+    })
+  })
+
   it('feeds retrieval into the assembly with traceable per-snippet references', async () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     ctx.knowledge.registerProvider(fakeProvider([
       fakeRow('docs/rockets.md', 'Rocket Notes', 'rocket science launches rockets'),
       fakeRow('guide/engines.md', 'Engine Guide', 'engines burn fuel'),
@@ -126,7 +210,7 @@ describe('work knowledge contributor (Issue 020)', () => {
       // The knowledge/retrieved event carries the query summary + source ids
       // (the assembly appends context/contributed AFTER the retrieval, so
       // the retrieval event is not necessarily the log tail).
-      const event = session.events.filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
+      const event = session.snapshotEvents().filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
       expect(event.data).toMatchObject({
         querySummary: 'tell me about rockets',
         queryBytes: 'tell me about rockets'.length,
@@ -145,6 +229,10 @@ describe('work knowledge contributor (Issue 020)', () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     ctx.knowledge.registerProvider(fakeProvider([
       fakeRow('docs/a.md', 'A', 'alpha content'),
       fakeRow('docs/b.md', 'B', 'beta content'),
@@ -158,7 +246,7 @@ describe('work knowledge contributor (Issue 020)', () => {
       const second = await ctx.context.assemble(session)
       expect(second.text).toBe(first.text)
       expect(contributor.projection!.sources.map((source) => source.refId)).toEqual(['s1', 's2'])
-      expect(session.events.filter((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toHaveLength(2)
+      expect(session.snapshotEvents().filter((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toHaveLength(2)
     } finally {
       await ctx.fiber.dispose()
     }
@@ -168,6 +256,10 @@ describe('work knowledge contributor (Issue 020)', () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     ctx.knowledge.registerProvider(fakeProvider([]))
     const session = makeSession()
     ask(session, 'nothing matches this')
@@ -179,7 +271,7 @@ describe('work knowledge contributor (Issue 020)', () => {
       const projection = contributor.projection!
       expect(projection.status).toBe('empty')
       expect(projection.sources).toEqual([])
-      const event = session.events.filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
+      const event = session.snapshotEvents().filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
       expect(event.data).toMatchObject({ status: 'empty', sourceIds: [], querySummary: 'nothing matches this' })
     } finally {
       await ctx.fiber.dispose()
@@ -190,6 +282,11 @@ describe('work knowledge contributor (Issue 020)', () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The claimed-input path reads the `lastUserInput` projection, so this
+    // composition must mount the registry — the mandatory projection seam
+    // fails at first dependent access rather than degrading to a default.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     ctx.knowledge.registerProvider(fakeProvider([fakeRow('docs/a.md', 'A', 'alpha')]))
     const session = makeSession() // no user message
     const contributor = new WorkKnowledgeContributor({ session, knowledge: ctx.knowledge })
@@ -198,7 +295,7 @@ describe('work knowledge contributor (Issue 020)', () => {
       const assembly = await ctx.context.assemble(session)
       expect(assembly.text).toBe('')
       expect(contributor.projection!.status).toBe('skipped')
-      expect(session.events.some((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toBe(false)
+      expect(session.snapshotEvents().some((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toBe(false)
       // Without a knowledge service the contributor also reports skipped.
       const bareCtx = new Context()
       await bareCtx.plugin(ContextService)
@@ -219,6 +316,10 @@ describe('work knowledge contributor (Issue 020)', () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     ctx.knowledge.registerProvider(fakeProvider(() => {
       throw new Error('index offline')
     }))
@@ -233,7 +334,7 @@ describe('work knowledge contributor (Issue 020)', () => {
       expect(projection.status).toBe('failed')
       expect(projection.error).toContain('index offline')
       expect(projection.sources).toEqual([])
-      expect(session.events.some((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toBe(false)
+      expect(session.snapshotEvents().some((event) => event.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE)).toBe(false)
     } finally {
       await ctx.fiber.dispose()
     }
@@ -243,6 +344,10 @@ describe('work knowledge contributor (Issue 020)', () => {
     const ctx = new Context()
     await ctx.plugin(ContextService)
     await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
     let seen: string | undefined
     const provider: KnowledgeProvider = {
       name: 'spy',
@@ -304,6 +409,10 @@ describe.skipIf(isBun)('work knowledge contributor with FTS dataset (Node)', () 
 
       await ctx.plugin(ContextService)
       await ctx.plugin(KnowledgeService)
+    // The contributor reads the turn's question from the `lastUserInput`
+    // projection, so a composition that assembles must mount the registry.
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(lastUserInputProjection)
       ctx.knowledge.registerProvider(provider)
       const session = makeSession('session_work_fts')
       // Every term must be indexed: the FTS MATCH joins terms with AND.
@@ -326,7 +435,7 @@ describe.skipIf(isBun)('work knowledge contributor with FTS dataset (Node)', () 
         expect(source.location).toEqual({ start: 0, end: expect.any(Number) as number })
       }
       // The event carries rank-ordered source ids.
-      const event = session.events.filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
+      const event = session.snapshotEvents().filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
       expect(event.type).toBe(KNOWLEDGE_RETRIEVED_EVENT_TYPE)
       expect(event.data).toMatchObject({ status: 'found' })
       expect(event.data.sourceIds.every((id: string) => id.startsWith('sqlite-fts#'))).toBe(true)
@@ -352,7 +461,7 @@ describe.skipIf(isBun)('work knowledge contributor with FTS dataset (Node)', () 
         expect(emptyAssembly.text).toBe('')
         expect(emptyContributor.projection!.status).toBe('empty')
         expect(emptyContributor.projection!.sources).toEqual([])
-        const emptyEvent = emptySession.events.filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
+        const emptyEvent = emptySession.snapshotEvents().filter((entry) => entry.type === KNOWLEDGE_RETRIEVED_EVENT_TYPE).at(-1)!
         expect(emptyEvent.data).toMatchObject({ status: 'empty', sourceIds: [] })
       } finally {
         await emptyCtx.fiber.dispose()

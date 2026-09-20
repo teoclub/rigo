@@ -25,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 let failures = 0
 
 function fail(message: string): void {
@@ -56,9 +56,12 @@ for (const file of new Set(localFiles)) {
 }
 if (localFiles.length > 0) console.log(`✓ ${new Set(localFiles).size} mapped local compat files exist`)
 
-// 3. The migrated upstream suites pass in Node (vitest) and Bun.
+// 3. The migrated upstream suites pass in Node (vitest) and Bun. The Bun half
+// goes through scripts/test-bun.ts so the files bun:test structurally cannot
+// load are excluded in the ONE place that records why (BUN_UNSUPPORTED_TESTS),
+// and Node-only integration suites are dropped by import graph.
 run('upstream suites (Node/vitest)', 'bunx', ['vitest', 'run', 'tests/upstream'])
-run('upstream suites (Bun)', 'bun', ['test', 'tests/upstream'])
+run('suite (Bun)', 'bun', ['scripts/test-bun.ts'])
 
 if (failures > 0) {
   console.error(`verify-compat: ${failures} failure(s) — the merge is blocked`)

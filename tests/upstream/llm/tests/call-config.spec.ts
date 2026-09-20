@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { callConfigEquals, deepFreeze, isAgentLoopRequest, markAgentLoopRequest } from '@teoclub/harness-llm/src/call-config.ts'
+import { deepFreeze } from '@teoclub/harness-values'
+import { callConfigEquals, isAgentLoopRequest, markAgentLoopRequest } from '@teoclub/harness-llm/src/call-config.ts'
 import { ReasoningEffortId } from '@teoclub/harness-llm/src/brand.ts'
 import type { GenerateOptions } from '@teoclub/harness-llm/src/types.ts'
 

@@ -4,7 +4,7 @@
  * Adapters expose one resolved policy per registered provider route; the
  * optional dsh-llm-retry plugin executes it on the agent's failed-step extension point.
  *
- * @module @deepseek-ai/dsh-llm/retry-policy
+ * @module @teoclub/harness-llm/retry-policy
  */
 
 import z from '@teoclub/schemastery'

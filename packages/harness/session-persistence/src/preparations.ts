@@ -1,6 +1,6 @@
 /**
  * Bounded sharing and exclusive reservation of unpublished Sessions.
- * @module @deepseek-ai/dsh-session-persistence/preparations
+ * @module @teoclub/harness-session-persistence/preparations
  */
 
 import type { Session, SessionId } from '@teoclub/harness-session'

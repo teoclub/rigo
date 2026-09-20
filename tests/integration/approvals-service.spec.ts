@@ -105,6 +105,8 @@ describe.skipIf(typeof Bun !== 'undefined')('approval service (Node)', async () 
       version: SESSION_FORMAT_VERSION,
       id: SessionId(id),
       createdAt: Date.now(),
+      // Required since the 0.1.6 baseline.
+      isSeeded: false,
     })
   }
 
@@ -391,7 +393,7 @@ describe.skipIf(typeof Bun !== 'undefined')('approval service (Node)', async () 
       })
       expect(approval.id).toMatch(/^approval_/)
       // The request is recorded in the session event log (waiting progress).
-      const requested = session.events.filter((event) => event.type === mods().APPROVAL_REQUESTED_EVENT_TYPE).at(-1)!
+      const requested = session.snapshotEvents().filter((event) => event.type === mods().APPROVAL_REQUESTED_EVENT_TYPE).at(-1)!
       expect(requested.data).toMatchObject({
         approvalId: approval.id,
         sessionId: 'session_approval',
@@ -423,7 +425,7 @@ describe.skipIf(typeof Bun !== 'undefined')('approval service (Node)', async () 
       expect(resolved.execution).toMatchObject({ status: 'completed' })
       expect(log.executed).toBe(1)
       // The resolution landed in the session log too.
-      const decided = session.events.filter((event) => event.type === mods().APPROVAL_RESOLVED_EVENT_TYPE).at(-1)!
+      const decided = session.snapshotEvents().filter((event) => event.type === mods().APPROVAL_RESOLVED_EVENT_TYPE).at(-1)!
       expect(decided.data).toMatchObject({ approvalId: pending[0]!.id, outcome: 'approved' })
       expect(secondCtx.approvals.listPending('session_approval')).toEqual([])
       // The default TTL applies when the caller omits an expiry.

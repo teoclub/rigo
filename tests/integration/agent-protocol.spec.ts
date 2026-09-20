@@ -21,6 +21,7 @@ import {
   resumeAgent,
 } from '@teoclub/harness-agent-protocol'
 import type { PublicAgentStatus } from '@teoclub/harness-agent-protocol'
+import { SessionProjectionRegistry } from '@teoclub/harness-session-projection'
 import { MockAdapter, textResponse } from '../upstream/agent-loop/tests/mock-adapter.ts'
 
 /**
@@ -71,6 +72,9 @@ describe('Rigo agent public API (Issue 013)', () => {
         await ctx.plugin(SystemPrompt)
         await ctx.plugin(ToolRuntime)
         await ctx.plugin(AgentRegistry)
+        // The 0.1.6 loop declares `sessionProjections` as a required
+        // injection, so the registry must mount before it.
+        await ctx.plugin(SessionProjectionRegistry)
         await ctx.plugin(AgentLoop, { agents: [] })
         await ctx.plugin(SqliteSessionPersistence as never, { path: join(root, 'rigo.sqlite') })
         ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('resumed')]))
@@ -95,7 +99,7 @@ describe('Rigo agent public API (Issue 013)', () => {
           expect(resumed.agent.sessionId).toBe(sessionId)
           expect(resumed.agent.status).toBe('idle')
           // The event log survived the restart with the pre-restart turn.
-          const types = second.ctx.agents.get(sessionId)!.session.events.map((event) => event.type)
+          const types = second.ctx.agents.get(sessionId)!.session.snapshotEvents().map((event) => event.type)
           expect(types).toContain('user/message')
           expect(types).toContain('assistant/message')
           await resumed.dispose()
@@ -137,18 +141,18 @@ describe('Rigo agent public API (Issue 013)', () => {
 
       created.agent.send('first turn')
       await created.agent.whenIdle()
-      expect(session.events.filter((event) => event.type === 'user/message')).toHaveLength(1)
+      expect(session.snapshotEvents().filter((event) => event.type === 'user/message')).toHaveLength(1)
 
       // steer opens a turn from idle.
       created.agent.steer('steering input')
       await created.agent.whenIdle()
-      expect(session.events.filter((event) => event.type === 'user/message')).toHaveLength(2)
+      expect(session.snapshotEvents().filter((event) => event.type === 'user/message')).toHaveLength(2)
 
       // inject stages context without opening a turn.
-      const before = session.events.length
+      const before = session.snapshotEvents().length
       created.agent.inject('injected context')
-      expect(session.events.length).toBe(before + 1)
-      expect(session.events.at(-1)!.type).toBe('agent/inbox/spliced')
+      expect(session.snapshotEvents().length).toBe(before + 1)
+      expect(session.snapshotEvents().at(-1)!.type).toBe('agent/inbox/spliced')
 
       await created.dispose()
     } finally {

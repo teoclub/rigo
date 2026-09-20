@@ -40,7 +40,7 @@ import SqliteFtsKnowledgeProvider, { KNOWLEDGE_MIGRATIONS } from '@teoclub/share
 import SqliteSessionPersistence, { SESSION_API_FIELDS_MIGRATION, SESSION_PERSISTENCE_MIGRATIONS } from '@teoclub/shared-session-persistence-sqlite'
 import { NodeSqliteDriver } from '@teoclub/shared-storage-sqlite-node/node'
 import { runMigrations } from '@teoclub/shared-storage-sqlite-node/definition'
-import { WorkKnowledgeContributor } from '@teoclub/work-context'
+import { lastUserInputProjection, WorkKnowledgeContributor } from '@teoclub/work-context'
 import DocumentsService, { DOCUMENTS_MIGRATIONS } from '@teoclub/work-documents'
 import { LocalDocumentProvider } from '@teoclub/work-documents-local'
 import { createWriteDocumentAction } from '@teoclub/work-documents-write'
@@ -293,7 +293,7 @@ export function createWorkBasePlugins(config: WorkBaseConfig): Plugin[] {
           wireSession(ctx, config, session)
         })
       },
-      inject: ['documents', 'actions', 'approvals', 'knowledge', 'context', 'tools'],
+      inject: ['documents', 'actions', 'approvals', 'knowledge', 'context', 'tools', 'sessionProjections'],
     },
     compositionPlugin,
     clientFeaturesPlugin,
@@ -312,6 +312,18 @@ export function createWorkBasePlugins(config: WorkBaseConfig): Plugin[] {
           loadSession: async (id) => {
             const loaded = await root.sessionPersistence.load(SessionId(id))
             return { events: [...loaded.events] }
+          },
+          // SSE replay reads the DURABLE suffix: the quiesce-then-read drains
+          // the session's pending write batch first, so events still queued in
+          // the write-behind controller are not skipped. A missing session
+          // surfaces as `undefined`, which the facade turns into the 404 path.
+          readSessionFrom: async (id, fromSeq) => {
+            try {
+              const suffix = await root.sessionPersistence.readFromDurable(SessionId(id), fromSeq)
+              return { events: [...suffix.events] }
+            } catch {
+              return undefined
+            }
           },
           // The API session list: durable rows + field upserts through the
           // session persistence backend's api-side store.
@@ -393,7 +405,10 @@ function wireSession(ctx: Context, config: WorkBaseConfig, session: Session): vo
       actionName: `${WRITE_ACTION_PREFIX}${session.id}`,
     }))
   }
-  // Knowledge retrieval into the Context Assembly (KNOWLEDGE band).
+  // Knowledge retrieval into the Context Assembly (KNOWLEDGE band). The unit
+  // it reads the turn's question from is registered here, beside the one
+  // consumer, and disposed with the other per-session registrations.
+  disposers.push(ctx.sessionProjections.register(lastUserInputProjection))
   disposers.push(ctx.context.register(new WorkKnowledgeContributor({
     session,
     knowledge: ctx.knowledge,

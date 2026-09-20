@@ -52,7 +52,7 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
   it('keeps the log append-only at the tail: events are frozen, seq stays contiguous, no overwrite', () => {
     const session = Session.create(SessionId('session_proto_append_only'))
     const first = session.append('turn/start', { turn: 1 })
-    const snapshot = session.events
+    const snapshot = session.snapshotEvents()
     expect(snapshot).toHaveLength(1)
     expect(Object.isFrozen(snapshot[0])).toBe(true)
     // The frozen snapshot cannot be mutated into a different fact.
@@ -62,8 +62,8 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
     expect(first.data.turn).toBe(1)
     // Appends only ever extend the tail.
     session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
-    expect(session.events.map((event) => event.seq)).toEqual([0, 1])
-    expect(session.events[0]).toBe(snapshot[0])
+    expect(session.snapshotEvents().map((event) => event.seq)).toEqual([0, 1])
+    expect(session.snapshotEvents()[0]).toBe(snapshot[0])
   })
 
   it('writes user message, assistant chunk, assistant message, tool call and tool result to the stream', async () => {
@@ -81,7 +81,7 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
           return [{ type: 'text', text: `echo: ${args.text}` }]
         },
       }))
-      const agent = handle.ctx.agentLoop.create(SessionId('session_proto_loop'), { provider: 'mock', model: 'mock' })
+      const agent = await handle.ctx.agentLoop.create(SessionId('session_proto_loop'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'use the tool' }], source: { kind: 'user' } }))
       await agent.whenIdle()
 
@@ -94,7 +94,7 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
 
       // Every event carries the protocol envelope.
       const envelope = encodeSessionLog(agent.session)
-      expect(envelope.length).toBe(agent.session.events.length)
+      expect(envelope.length).toBe(agent.session.snapshotEvents().length)
       const toolCall = envelope.find((event) => event.type === 'tool/call')
       expect(toolCall?.turn).toBe(turnId(agent.session.id, 1))
       expect(toolCall?.step).toBe(stepId(agent.session.id, 1, 1))
@@ -118,7 +118,7 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
           return [{ type: 'text', text: `echo: ${args.text}` }]
         },
       }))
-      const agent = handle.ctx.agentLoop.create(SessionId('session_proto_history'), { provider: 'mock', model: 'mock' })
+      const agent = await handle.ctx.agentLoop.create(SessionId('session_proto_history'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'use the tool' }], source: { kind: 'user' } }))
       await agent.whenIdle()
 
@@ -126,10 +126,11 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
       const second = deriveModelHistory(agent.session)
       expect(second).toEqual(first)
       // Replaying the identical event log derives the identical history.
-      const replay = Session.create(agent.session.id, agent.session.events)
+      const replay = Session.create(agent.session.id, agent.session.snapshotEvents())
       expect(deriveModelHistory(replay)).toEqual(first)
-      // The tool turn derives the full four-message shape.
-      expect(first.map((message) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant'])
+      // The tool turn derives the full shape. The 0.1.6 loop also writes a
+      // `system/message` event, which derives the leading system entry.
+      expect(first.map((message) => message.role)).toEqual(['system', 'user', 'assistant', 'user', 'assistant'])
     } finally {
       await handle.dispose()
     }
@@ -175,7 +176,7 @@ describe('Rigo Session Event protocol (Issue 006)', () => {
     expect(encodeSessionLog(session)).toHaveLength(2)
     await handle.dispose()
     // The store is gone with the tree; the detached events stay readable.
-    expect(session.events).toHaveLength(2)
+    expect(session.snapshotEvents()).toHaveLength(2)
     expect(handle.ctx.get('sessions')).toBeUndefined()
   })
 })

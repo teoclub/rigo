@@ -19,6 +19,18 @@
       "path": "packages/harness/timeout"
     },
     {
+      "path": "packages/harness/values"
+    },
+    {
+      "path": "packages/harness/crypto"
+    },
+    {
+      "path": "packages/harness/atomic-write"
+    },
+    {
+      "path": "packages/harness/package-manifest"
+    },
+    {
       "path": "packages/harness/attachment"
     },
     {
@@ -38,6 +50,15 @@
     },
     {
       "path": "packages/harness/agent"
+    },
+    {
+      "path": "packages/harness/session-projection"
+    },
+    {
+      "path": "packages/harness/sandbox"
+    },
+    {
+      "path": "packages/harness/sandbox-policy"
     },
     {
       "path": "packages/harness/agent-tool-presentation"

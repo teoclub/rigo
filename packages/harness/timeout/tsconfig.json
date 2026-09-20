@@ -6,13 +6,5 @@
   },
   "include": [
     "src"
-  ],
-  "references": [
-    {
-      "path": "../invariants"
-    },
-    {
-      "path": "../../../vendor/cordis/packages/cordis"
-    }
   ]
 }

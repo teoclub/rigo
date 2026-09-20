@@ -88,7 +88,7 @@ test('happy path: knowledge answer, sources, approved write, audit', async ({ pa
     // Web UI and headless API agree on the same event log.
     const session = harness.ctx.sessions.get(SessionId(harness.sessionId))!
     const apiProjection = await harness.facade.auditProjection(harness.sessionId)
-    expect(apiProjection.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+    expect(apiProjection.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
     expect(apiProjection.some((entry) => entry.category === 'document')).toBe(true)
   } finally {
     // Drop the browser connections FIRST: the open page keeps the Vite HMR

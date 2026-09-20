@@ -15,6 +15,19 @@ import type { PublicAgent } from '@teoclub/harness-agent-protocol'
 import { RuntimeFacade } from '@teoclub/api-sdk'
 import { createApiServer, sseReconnectDelay, SSE_RECONNECT_BACKOFF_MS, type ApiServer } from '@teoclub/api-http'
 
+/** Wire the facade's durable history reader to this harness's persistence. */
+function durableReader(ctx: Context) {
+  return async (id: string, fromSeq: number): Promise<{ events: readonly never[] } | undefined> => {
+    try {
+      const suffix = await ctx.sessionPersistence.readFromDurable(SessionId(id), fromSeq)
+      return { events: [...suffix.events] as readonly never[] }
+    } catch {
+      return undefined
+    }
+  }
+}
+
+
 const isBun = typeof Bun !== 'undefined'
 
 interface SseFrame {
@@ -49,7 +62,7 @@ const openServers: { api: ApiServer; ctx: Context }[] = []
 async function liveServer(): Promise<{ base: string; ctx: Context; facade: RuntimeFacade; sessionId: string }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  const facade = new RuntimeFacade(ctx, {
+  const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
     agentFactory: (input) => {
       const session = ctx.sessions.create(undefined, {
         ...(input.cwd === undefined ? {} : { meta: { cwd: input.cwd } }),
@@ -279,7 +292,7 @@ describe.skipIf(isBun)('sse persisted replay (Node)', async () => {
     try {
       await secondCtx.plugin(SessionStore)
       await secondCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: COMPOSED() })
-      const facade = new RuntimeFacade(secondCtx, {
+      const facade = new RuntimeFacade(secondCtx, { readSessionFrom: durableReader(secondCtx),
         loadSession: async (id) => {
           const loaded = await secondCtx.sessionPersistence.load(SessionId(id))
           return { events: loaded.events }
@@ -329,7 +342,7 @@ describe.skipIf(isBun)('sse persisted replay (Node)', async () => {
     try {
       await secondCtx.plugin(SessionStore)
       await secondCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: COMPOSED() })
-      const facade = new RuntimeFacade(secondCtx, {
+      const facade = new RuntimeFacade(secondCtx, { readSessionFrom: durableReader(secondCtx),
         loadSession: async (id) => {
           const loaded = await secondCtx.sessionPersistence.load(SessionId(id))
           return { events: loaded.events }

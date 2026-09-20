@@ -1,18 +1,37 @@
 {
   "name": "@teoclub/work-base",
-  "description": "Rigo Work Base Bundle (SPEC §2.6/§10 Phase 6): the official composition of core, shared plugins, work providers and the API host",
+  "description": "Rigo Work Base Bundle (SPEC \u00a72.6/\u00a710 Phase 6): the official composition of core, shared plugins, work providers and the API host",
   "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/teoclub/rigo.git", "directory": "packages/bundle/work-base" },
-  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/teoclub/rigo.git",
+    "directory": "packages/bundle/work-base"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "license": "MIT",
-  "teoclub": { "origin": "local", "issue": "031" },
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "teoclub": {
+    "origin": "local",
+    "issue": "031"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "exports": {
-    ".": { "development": "./src/index.ts", "types": "./lib/types/index.d.ts", "default": "./lib/index.js" },
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -24,6 +43,7 @@
     "@teoclub/harness-app-boot": "*",
     "@teoclub/harness-context": "*",
     "@teoclub/harness-session": "*",
+    "@teoclub/harness-session-projection": "*",
     "@teoclub/harness-tools-protocol": "*",
     "@teoclub/shared-actions": "*",
     "@teoclub/shared-approvals": "*",
@@ -39,5 +59,9 @@
     "@teoclub/work-tool-document-read": "*",
     "@teoclub/work-tool-document-write": "*"
   },
-  "files": ["lib/index.js", "lib/types/**/*.d.ts", "cordis.patch.yml"]
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml"
+  ]
 }

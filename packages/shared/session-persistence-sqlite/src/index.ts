@@ -37,6 +37,12 @@ import {
   type ApiSessionFields,
   type ApiSessionRow,
   type PersistenceBackend,
+  type SessionAccess,
+  type SessionHandle,
+  type SessionPersistenceCreateOptions,
+  type SessionPersistenceOpenOptions,
+  type SessionPersistenceListOptions,
+  type SessionPersistenceStatOptions,
   type SessionPersistenceSnapshot,
   type StoredPrefix,
 } from '@teoclub/harness-session-persistence'
@@ -235,8 +241,16 @@ export default class SqliteSessionPersistence extends SessionPersistence impleme
 
   // --- Service API (delegated to the coordinator) ---
 
-  create(meta: SessionHeader): Promise<void> {
-    return this.coordinator.create(meta)
+  create(meta: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
+    return this.coordinator.create(meta, options)
+  }
+
+  open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+    return this.coordinator.open(id, access, options)
+  }
+
+  stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined> {
+    return this.coordinator.stat(id, options)
   }
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
@@ -260,30 +274,34 @@ export default class SqliteSessionPersistence extends SessionPersistence impleme
     return this.coordinator.readFrom(id, fromSeq, signal)
   }
 
-  async list(signal?: AbortSignal): Promise<SessionHeader[]> {
-    signal?.throwIfAborted()
-    return this.withBusy(() => {
-      return this.driver.query<StoredRow>('SELECT * FROM sessions ORDER BY id').map(headerFromRow)
-    })
+  /** Durable suffix read: the coordinator drains this session's pending batch first. */
+  override readFromDurable(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    return this.coordinator.readFromDurable(id, fromSeq, signal)
   }
 
-  async listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]> {
+  async list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]> {
+    const signal = options?.signal
     signal?.throwIfAborted()
-    return this.withBusy(() => {
-      return this.driver.query<StoredRow & { event_count: number; last_seq: number | null }>(
-        `SELECT s.*, COALESCE(e.event_count, 0) AS event_count, e.last_seq
-         FROM sessions s
-         LEFT JOIN (
-           SELECT session_id, COUNT(*) AS event_count, MAX(seq) AS last_seq
-           FROM session_events
-           GROUP BY session_id
-         ) e ON e.session_id = s.id
-         ORDER BY s.id`,
-      ).map((row) => ({
-        header: headerFromRow(row),
-        revision: this.revision(row, row.event_count, row.last_seq ?? undefined)!,
-      }))
-    })
+    return [
+      // A created-but-unappended session has no row yet (lazy materialization),
+      // so the query below cannot see it while `stat` on this instance can.
+      ...this.coordinator.pendingSnapshots(),
+      ...this.withBusy(() => {
+        return this.driver.query<StoredRow & { event_count: number; last_seq: number | null }>(
+          `SELECT s.*, COALESCE(e.event_count, 0) AS event_count, e.last_seq
+           FROM sessions s
+           LEFT JOIN (
+             SELECT session_id, COUNT(*) AS event_count, MAX(seq) AS last_seq
+             FROM session_events
+             GROUP BY session_id
+           ) e ON e.session_id = s.id
+           ORDER BY s.id`,
+        ).map((row) => ({
+          header: headerFromRow(row),
+          revision: this.revision(row, row.event_count, row.last_seq ?? undefined)!,
+        }))
+      }),
+    ]
   }
 
   // --- API session list (session_api_fields side table) ---

@@ -15,10 +15,19 @@
       "path": "../brand"
     },
     {
+      "path": "../crypto"
+    },
+    {
       "path": "../invariants"
     },
     {
+      "path": "../protocol"
+    },
+    {
       "path": "../timeout"
+    },
+    {
+      "path": "../values"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

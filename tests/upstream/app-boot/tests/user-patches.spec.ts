@@ -289,6 +289,11 @@ describe('boot with user patches', () => {
   it('applies id-targeted overrides, inserts, and interpolates !!js from the environment', async () => {
     const dir = tmp()
     const userDir = tmp()
+    // The plugin lives beside the PATCH, not beside the config tree: an
+    // inserted row's relative `name` is anchored to the overlay that wrote it
+    // (`anchorInsertedPluginNames`), so `./noop.mjs` here means
+    // `<userDir>/noop.mjs`.
+    writeFileSync(join(userDir, 'noop.mjs'), 'export function apply() {}\n')
     writeFileSync(join(userDir, PROFILE_PATCH_FILENAME), [
       '- id: noop',
       '  name: ./noop.mjs',
@@ -355,6 +360,12 @@ describe('boot with user patches', () => {
       compose: userPatches => [...basePatches, ...userPatches],
     })
     try {
+      // Settle before the FIRST write too, not only between steps: the
+      // watcher's `ready` resolves once the initial scan completes, which on
+      // macOS is not yet the same tick in which fsevents delivers a file
+      // created immediately afterwards. Without this the opening write is
+      // occasionally missed outright (~1 run in 5), not merely delayed.
+      await settleChokidarChangeThrottle()
       writeFileSync(filename, '- id: noop\n  config:\n    value: live\n')
       await eventually(() => (entryConfig(ctx, 'noop') as { value?: string }).value === 'live', 'user patch addition was not applied')
       await settleChokidarChangeThrottle()

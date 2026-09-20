@@ -130,6 +130,15 @@ export interface SessionLoader {
 }
 
 /**
+ * Durable suffix reader for SSE replay (the host wires its backend). Returns
+ * `undefined` when the session does not exist anywhere; the returned events
+ * are those with `seq >= fromSeq`.
+ */
+export interface SessionRangeReader {
+  (sessionId: string, fromSeq: number): Promise<{ events: SessionEvent[] } | undefined>
+}
+
+/**
  * One persisted session row as the persistence seam serves it (structurally
  * the backend's ApiSessionRow — declared here so the facade adds no package
  * dependency, following the loadSession/checkDatabase seam pattern).
@@ -181,6 +190,7 @@ export interface RuntimeFacadeOptions {
   agentFactory?: AgentFactory
   /** Loads a persisted session log for {@link RuntimeFacade.resumeSession}. */
   loadSession?: SessionLoader
+  readSessionFrom?: SessionRangeReader
   /** Database health probe for {@link RuntimeFacade.health} (host wires a SQLite ping). */
   checkDatabase?: () => boolean | Promise<boolean>
   /** Provider/model existence check for session creation (host wires the LLM registry). */
@@ -199,6 +209,7 @@ export class RuntimeFacade {
   private readonly turns = new Map<string, string>()
   private readonly agentFactory: AgentFactory | undefined
   private readonly loadSession: SessionLoader | undefined
+  private readonly readSessionFrom: SessionRangeReader | undefined
   private readonly checkDatabase: (() => boolean | Promise<boolean>) | undefined
   private readonly modelValidator: ((providerId: string, modelId: string) => boolean | Promise<boolean>) | undefined
   private readonly persistence: FacadePersistence | undefined
@@ -207,6 +218,7 @@ export class RuntimeFacade {
   constructor(private readonly ctx: Context, options: RuntimeFacadeOptions = {}) {
     this.agentFactory = options.agentFactory
     this.loadSession = options.loadSession
+    this.readSessionFrom = options.readSessionFrom
     this.checkDatabase = options.checkDatabase
     this.modelValidator = options.modelValidator
     this.persistence = options.persistence
@@ -350,7 +362,10 @@ export class RuntimeFacade {
       seed: loaded.events,
       meta: {
         ...(loaded.cwd === undefined ? {} : { cwd: loaded.cwd }),
-        seedLength: loaded.events.length,
+        // Resuming replays stored history into a fresh log; it is not fork
+        // lineage, so `isSeeded` stays false (the 0.1.6 replacement for the
+        // removed `seedLength`, whose value is now derived from the seed).
+        isSeeded: false,
       },
     })
     // Resume is headless at the facade level; hosts wire agent resume
@@ -444,32 +459,67 @@ export class RuntimeFacade {
    * Returns `undefined` when the session cannot be found anywhere.
    */
   async replaySessionEvents(sessionId: string, afterSeq: number): Promise<{ sessionId: string; events: SessionEvent[] } | undefined> {
-    const live = this.ctx.sessions.get(SessionId(sessionId))
-    if (live !== undefined) {
-      return { sessionId, events: live.events.filter((event) => event.seq > afterSeq) }
+    // Prefer the DURABLE suffix: the host wires `readSessionFrom` to the
+    // persistence backend's quiesce-then-read, so a batch still sitting in the
+    // write-behind queue is not silently skipped. The old live branch read the
+    // in-memory log directly, which is the dependency the 0.1.6 session-read
+    // decision removes.
+    if (this.readSessionFrom !== undefined) {
+      const suffix = await this.readSessionFrom(sessionId, afterSeq + 1)
+      if (suffix !== undefined) return { sessionId, events: [...suffix.events] }
     }
-    if (this.loadSession === undefined) return undefined
-    const loaded = await this.loadSession(sessionId)
-    if (loaded === undefined) return undefined
-    return { sessionId, events: loaded.events.filter((event) => event.seq > afterSeq) }
+    // A host with no persistence backend has no durable log by definition, so
+    // the live session is the only source it can offer. Serving the in-memory
+    // stream is strictly better than refusing it; a host that can persist
+    // should wire the reader above.
+    const live = this.ctx.sessions.get(SessionId(sessionId))
+    if (live === undefined) return undefined
+    // oxlint-disable-next-line typescript/no-deprecated -- In-memory host: no durable log exists to read instead.
+    return { sessionId, events: live.snapshotEvents().filter((event) => event.seq > afterSeq) }
   }
 
   /** The audit projection of one session (AC-3). */
-  auditProjection(sessionId: string): AuditEntry[] {
-    const session = this.ctx.sessions.get(SessionId(sessionId))
-    if (session === undefined) {
+  async auditProjection(sessionId: string): Promise<AuditEntry[]> {
+    // The audit view covers every committed fact, so it reads the durable log
+    // rather than depending on the session being resident in memory.
+    const events = await this.auditSourceEvents(sessionId)
+    if (events === undefined) {
       throw new SdkError('SESSION_NOT_FOUND', `session "${sessionId}" not found`)
     }
-    return this.requireAudit().project(session)
+    return this.requireAudit().project(sessionId, events)
+  }
+
+  /**
+   * Resolve the history one audit view is derived from.
+   *
+   * The durable log is preferred (the host's `readSessionFrom`, drained through
+   * the backend's quiesce-then-read). A host with no persistence backend has no
+   * durable log at all, so its live session is the only source — refusing to
+   * serve the audit for such a host would remove the endpoint rather than
+   * migrate it.
+   * @param sessionId - the session whose facts are projected.
+   * @returns the events, or `undefined` when the session is unknown.
+   */
+  private async auditSourceEvents(sessionId: string): Promise<readonly SessionEvent[] | undefined> {
+    if (this.readSessionFrom !== undefined) {
+      const suffix = await this.readSessionFrom(sessionId, 0)
+      if (suffix !== undefined) return suffix.events
+    }
+    const live = this.ctx.sessions.get(SessionId(sessionId))
+    // oxlint-disable-next-line typescript/no-deprecated -- In-memory host: no durable log exists to read instead.
+    return live?.snapshotEvents()
   }
 
   private snapshot(session: Session, row?: FacadeSessionRow): SessionSnapshot {
-    const events = session.events
     const meta = this.metadata.get(session.id)
     // In-memory metadata wins; the durable row backfills what a restart lost.
     const providerId = meta?.providerId ?? row?.providerId
     const modelId = meta?.modelId ?? row?.modelId
     const title = meta?.title ?? row?.title
+    // `session.seq` is the log length by the `seq = log.length` contiguity
+    // contract, so the count and last sequence come from maintained state
+    // rather than a read of the event history.
+    const eventCount = session.seq
     return {
       sessionId: session.id,
       status: this.closed.has(session.id) ? 'closed' : 'active',
@@ -478,8 +528,8 @@ export class RuntimeFacade {
       ...(providerId === undefined ? {} : { providerId }),
       ...(modelId === undefined ? {} : { modelId }),
       ...(title === undefined ? {} : { title }),
-      eventCount: events.length,
-      lastSeq: events.length === 0 ? -1 : events[events.length - 1]!.seq,
+      eventCount,
+      lastSeq: eventCount === 0 ? -1 : eventCount - 1,
       ...(row?.createdAt === undefined ? {} : { createdAt: row.createdAt }),
       ...(row?.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
     }
@@ -534,8 +584,9 @@ export class RuntimeFacade {
     return service
   }
 
-  private requireAudit(): { project(session: Session): AuditEntry[] } {
-    const service = (this.ctx as unknown as { audit?: unknown }).audit as { project(session: Session): AuditEntry[] } | undefined
+  private requireAudit(): { project(sessionId: string, events: readonly SessionEvent[]): AuditEntry[] } {
+    const service = (this.ctx as unknown as { audit?: unknown }).audit as
+      { project(sessionId: string, events: readonly SessionEvent[]): AuditEntry[] } | undefined
     if (service === undefined) {
       throw new SdkError('PROVIDER_NOT_FOUND', 'the audit service is not mounted')
     }
@@ -598,7 +649,7 @@ export class InProcessSdk {
     return this.wrap(() => this.facade.decideApproval(approvalId, decision))
   }
 
-  auditProjection(sessionId: string): AuditEntry[] {
+  auditProjection(sessionId: string): Promise<AuditEntry[]> {
     return this.wrap(() => this.facade.auditProjection(sessionId))
   }
 

@@ -8,8 +8,9 @@
  * existing ancestor, canonicalized, so a path under missing parents still
  * reports its requested spelling.
  */
-import { dirname, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { realpath, stat } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { watch, type ChokidarOptions } from 'chokidar'
 import type { Context } from '@teoclub/cordis'
 
@@ -55,6 +56,23 @@ async function findWatchRoot(filename: string): Promise<{ filename: string; root
  * @returns an asynchronous disposer that closes the watcher and drains the current refresh.
  * @throws when path resolution, watcher startup, or effect registration fails.
  */
+/**
+ * A path in the form both chokidar and the caller agree on: the directory is
+ * resolved through symlinks and the leaf is kept verbatim, so a file that does
+ * not exist yet (or no longer) still compares. Falls back to a plain resolve
+ * when the directory itself is gone.
+ * @param path - a path from either side of the watch.
+ * @returns the comparable spelling.
+ */
+function comparablePath(path: string): string {
+  const absolute = resolve(path)
+  try {
+    return join(realpathSync(dirname(absolute)), basename(absolute))
+  } catch {
+    return absolute
+  }
+}
+
 export async function watchConfig(
   ctx: Context, filename: string, options: ChokidarOptions, refresh: () => Promise<void> | void,
 ): Promise<() => Promise<void>> {
@@ -70,8 +88,13 @@ export async function watchConfig(
   const state = { dirty: false }
   let running: Promise<void> | undefined
   const onChange = (path: string) => {
-    const observed = resolve(path)
-    if (observed !== filename && observed !== target.filename) return
+    // Compare REAL paths, not the spellings the two sides happen to use:
+    // chokidar reports the path it resolved (on macOS `/private/var/...`),
+    // while the caller registered whatever `/var/...` alias it was handed.
+    // Comparing spellings drops the event silently, and only sometimes —
+    // which is why this presented as a flaky watch rather than a broken one.
+    const observed = comparablePath(path)
+    if (observed !== comparablePath(filename) && observed !== comparablePath(target.filename)) return
     state.dirty = true
     if (running) return
     running = (async () => {

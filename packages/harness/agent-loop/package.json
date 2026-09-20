@@ -22,9 +22,9 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "packages/core/agent-loop",
       "upstreamPackage": "@deepseek-ai/dsh-agent-loop",
-      "upstreamVersion": "0.1.1-rc.2",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
-      "classification": "KEEP"
+      "upstreamVersion": "0.1.6-alpha.1",
+      "commit": "0a15e36e7f82b6ed45af6fa9759f29b40dcd965d",
+      "classification": "ADAPT"
     }
   },
   "exports": {
@@ -42,10 +42,14 @@
     "./src/*": "./src/*"
   },
   "dependencies": {
-    "@teoclub/schemastery": "*"
+    "@teoclub/harness-values": "*",
+    "@teoclub/schemastery": "*",
+    "@teoclub/harness-brand": "*",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@teoclub/harness-session-persistence": "*",
+    "@teoclub/harness-session-projection": "*",
     "@teoclub/harness-system-prompt": "*",
     "@teoclub/harness-invariants": "*",
     "@teoclub/harness-settings": "*",

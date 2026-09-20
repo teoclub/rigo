@@ -1,14 +1,14 @@
 /**
  * Default model selection for an Agent without a session-specific selection.
  *
- * @module @deepseek-ai/dsh-agent-default-model
+ * @module @teoclub/harness-agent-default-model
  */
 
 import { Context, Service } from '@teoclub/cordis'
 import z from '@teoclub/schemastery'
 import type { ModelSelection } from '@teoclub/harness-agent'
 import { ReasoningEffortId } from '@teoclub/harness-llm'
-import { installSettingsSection, settingsNamespace } from '@teoclub/harness-settings'
+import { settingsNamespace } from '@teoclub/harness-settings'
 
 declare module '@teoclub/cordis' {
   interface Context {
@@ -73,11 +73,13 @@ export class AgentDefaultModelConfig extends Service {
     super(ctx, 'agentDefaultModel')
     const entry: AgentDefaultModelSettings = { provider: config.provider, model: config.model }
     this.source = () => entry
-    installSettingsSection(ctx, AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA, entry, {
-      setSource: (current) => { this.source = current },
-      // Every consumer reads through currentSelection(), so no registration-level fact
-      // needs rebuilding when the settings document changes.
-      onChange: () => {},
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(ctx, AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE, AGENT_DEFAULT_MODEL_SETTINGS_SCHEMA, entry, {
+        setSource: (current) => { this.source = current },
+        // Every consumer reads through currentSelection(), so no registration-level fact
+        // needs rebuilding when the settings document changes.
+        onChange: () => {},
+      })
     })
   }
 

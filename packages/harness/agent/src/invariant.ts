@@ -1,10 +1,10 @@
-/** Package-owned agent lifecycle invariants. @module @deepseek-ai/dsh-agent/invariant */
+/** Package-owned agent lifecycle invariants. @module @teoclub/harness-agent/invariant */
 
 import type { Context } from '@teoclub/cordis'
 import type { InvariantInstaller } from '@teoclub/harness-invariants'
 import type { Agent, AgentStatus } from '@teoclub/harness-agent'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-agent'
+const PACKAGE_NAME = '@teoclub/harness-agent'
 
 /** Cordis companion plugin name. */
 export const name = 'agent-invariant'

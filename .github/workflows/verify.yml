@@ -33,13 +33,19 @@ jobs:
 
       # Source audit (Issue 002) verifies KEEP files stay rewrite-identical to
       # the pinned upstream commit; verify-baseline re-resolves the pinned
-      # tag. Provide a clone at the pinned baseline for both.
+      # tag. Provide a clone at the pinned baseline for both. The tag is read
+      # from scripts/lib/baseline.ts rather than repeated here, so bumping the
+      # pin cannot leave CI auditing a stale commit.
       - name: Prepare pinned upstream clone
         run: |
+          TAG=$(bun -e "import { BASELINE } from './scripts/lib/baseline.ts'; console.log(BASELINE.tag)")
+          SHA=$(bun -e "import { BASELINE } from './scripts/lib/baseline.ts'; console.log(BASELINE.commit)")
+          echo "cloning $TAG ($SHA)"
           git init -q /tmp/dsh-upstream
           git -C /tmp/dsh-upstream remote add origin https://github.com/deepseek-ai/deepseek-harness.git
-          git -C /tmp/dsh-upstream fetch --depth 1 origin refs/tags/dsh-v0.1.1-rc.2:refs/tags/dsh-v0.1.1-rc.2
+          git -C /tmp/dsh-upstream fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
           git -C /tmp/dsh-upstream checkout -q FETCH_HEAD
+          test "$(git -C /tmp/dsh-upstream rev-parse HEAD)" = "$SHA"
           echo "RIGO_UPSTREAM_CLONE=/tmp/dsh-upstream" >> "$GITHUB_ENV"
 
       - name: Typecheck
@@ -52,8 +58,12 @@ jobs:
       # Dual-runtime compatibility suites (SPEC §9.2, Issue 036).
       - name: Test (Node 24, vitest)
         run: bun run test
+      # The Bun half goes through its own runner: a few ported files cannot be
+      # LOADED by bun:test (no vi.hoisted / importOriginal), and Rigo's
+      # node:sqlite integration suites are Node-only by construction. The
+      # runner drops exactly those and records why in one place.
       - name: Test (Bun)
-        run: bun test ./tests/upstream ./tests/integration
+        run: bun run test:bun
 
       # Baseline, source-audit, packaging, boundary and compatibility-matrix
       # gates (Issues 001/002/003/035) - failures block the merge.

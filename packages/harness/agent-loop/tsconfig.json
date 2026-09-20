@@ -12,6 +12,9 @@
       "path": "../agent"
     },
     {
+      "path": "../brand"
+    },
+    {
       "path": "../invariants"
     },
     {
@@ -27,6 +30,9 @@
       "path": "../session-persistence"
     },
     {
+      "path": "../session-projection"
+    },
+    {
       "path": "../settings"
     },
     {
@@ -34,6 +40,9 @@
     },
     {
       "path": "../tools"
+    },
+    {
+      "path": "../values"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

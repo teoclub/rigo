@@ -51,9 +51,9 @@ export interface UiChatMessage {
 export interface StreamViewModel {
   agentStatus: 'idle' | 'running'
   phase: AgentPhase
-  /** Incremental assistant text (assistant/chunk payloads). */
+  /** Streaming assistant text of the current attempt (`assistant/attempt` payloads). */
   assistantText: string
-  /** Incremental reasoning text. */
+  /** Streaming reasoning text of the current attempt. */
   reasoningText: string
   /** Completed user/assistant turns (the current assistant stays in `assistantText`). */
   messages: UiChatMessage[]
@@ -65,6 +65,8 @@ export interface StreamViewModel {
   pendingApprovals: number
   /** Observed action executions. */
   actions: UiActionEvent[]
+  /** Why the current turn failed, when it did. Cleared when a new turn starts. */
+  turnError?: { message: string; code?: string }
   /** The last observed event seq. */
   lastSeq: number
   turnId: number | undefined
@@ -108,16 +110,84 @@ export function sourcesFromRetrieval(data: Record<string, unknown>): UiSourceRef
   })
 }
 
-/** Extract the assistant text of one chunk payload. */
-export function chunkText(payload: Record<string, unknown>): { text?: string; reasoning?: string } {
-  const chunk = payload.chunk as { type?: unknown; text?: unknown } | undefined
-  if (chunk === undefined || typeof chunk !== 'object') return {}
-  if (chunk.type === 'reasoning') {
-    const reasoning = typeof chunk.text === 'string' ? chunk.text : undefined
-    return reasoning === undefined ? {} : { reasoning }
+/**
+ * Extract the assistant text of one `assistant/attempt` payload.
+ *
+ * The attempt carries the stream as PACKED records rather than one event per
+ * delta: a `text-chunks` record holds one run's successive deltas in `texts`,
+ * and a run ends where the next record begins (a new `index`, or a
+ * reasoning/tool run in between), so every run contributes in order. The fold
+ * therefore REPLACES the view's text with this attempt's total instead of
+ * appending — each attempt event is a snapshot of the attempt so far, so
+ * appending would repeat everything already shown on every update.
+ * @param payload - the event's `data` (a `{ turn, step, stream }` object).
+ * @returns the attempt's whole text and reasoning, either one absent when the attempt carried none.
+ */
+export function attemptText(payload: Record<string, unknown>): { text?: string; reasoning?: string } {
+  const stream = payload.stream
+  if (!Array.isArray(stream)) return {}
+  const text: string[] = []
+  const reasoning: string[] = []
+  for (const record of stream) {
+    if (record === null || typeof record !== 'object') continue
+    const { type, texts } = record as { type?: unknown; texts?: unknown }
+    if (type !== 'text-chunks' && type !== 'reasoning-chunks') continue
+    if (!Array.isArray(texts)) continue
+    const joined = texts.filter((part): part is string => typeof part === 'string').join('')
+    if (joined.length === 0) continue
+    ;(type === 'text-chunks' ? text : reasoning).push(joined)
   }
-  const text = typeof chunk.text === 'string' ? chunk.text : undefined
-  return text === undefined ? {} : { text }
+  return {
+    ...(text.length === 0 ? {} : { text: text.join('') }),
+    ...(reasoning.length === 0 ? {} : { reasoning: reasoning.join('') }),
+  }
+}
+
+/**
+ * A structured turn failure, from whichever event carries it.
+ *
+ * A turn can fail in two places, and they name the same facts differently: a
+ * provider that never started fails inside the attempt's `finish` chunk
+ * (`reason.failure`), while a turn that dies later records it on
+ * `turn/end` (`reason.error`). Both are `{ message, code }`.
+ * @param reason - the `reason` object of either carrier.
+ * @param key - which member holds the failure on that carrier.
+ * @returns the failure, or `undefined` when the reason is not an error.
+ */
+export function turnFailure(
+  reason: unknown,
+  key: 'failure' | 'error',
+): { message: string; code?: string } | undefined {
+  if (reason === null || typeof reason !== 'object') return undefined
+  const row = reason as { kind?: unknown } & Record<string, unknown>
+  if (row.kind !== 'error') return undefined
+  const raw = row[key] ?? row['failure'] ?? row['error']
+  if (raw === null || typeof raw !== 'object') {
+    return { message: 'The turn failed, and the error carried no detail.' }
+  }
+  const failure = raw as { message?: unknown; code?: unknown }
+  return {
+    message: typeof failure.message === 'string' && failure.message.length > 0
+      ? failure.message
+      : 'The turn failed, and the error carried no message.',
+    ...(typeof failure.code === 'string' && failure.code.length > 0 ? { code: failure.code } : {}),
+  }
+}
+
+/** The `finish` chunk of an attempt stream, when the provider reported one. */
+function attemptFailure(payload: Record<string, unknown>): { message: string; code?: string } | undefined {
+  const stream = payload.stream
+  if (!Array.isArray(stream)) return undefined
+  for (const record of stream) {
+    if (record === null || typeof record !== 'object') continue
+    const chunk = (record as { chunk?: unknown }).chunk
+    if (chunk === null || typeof chunk !== 'object') continue
+    const row = chunk as { type?: unknown; reason?: unknown }
+    if (row.type !== 'finish') continue
+    const failure = turnFailure(row.reason, 'failure')
+    if (failure !== undefined) return failure
+  }
+  return undefined
 }
 
 function contentText(content: unknown): string | undefined {
@@ -170,9 +240,13 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
   const data = frame.data as { type?: unknown; payload?: unknown; seq?: unknown }
   if (typeof data.seq === 'number') view = { ...view, lastSeq: data.seq }
   switch (data.type) {
-    case 'turn/start':
+    case 'turn/start': {
+      // The previous turn's failure must be REMOVED, not set to `undefined`:
+      // under exactOptionalPropertyTypes an explicit undefined is a value, and
+      // it would flow out as a present-but-empty field.
+      const { turnError: _previousFailure, ...rest } = view
       return {
-        ...view,
+        ...rest,
         messages: archiveAssistant(view),
         assistantText: '',
         reasoningText: '',
@@ -182,13 +256,18 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
         phase: 'context',
         turnId: Number((data.payload as { turn?: unknown })?.turn),
       }
+    }
     case 'turn/end': {
-      const payload = data.payload as { reason?: { kind?: unknown } } | undefined
+      const payload = data.payload as { reason?: unknown } | undefined
+      const failure = turnFailure(payload?.reason, 'error')
       return {
         ...view,
         agentStatus: 'idle',
         phase: 'idle',
-        ...(payload?.reason?.kind === 'error' ? {} : {}),
+        // A failed turn used to end here with an empty answer and no signal;
+        // the failure is carried in the view model so the transcript can say
+        // what happened instead of looking like a model that said nothing.
+        ...(failure === undefined ? {} : { turnError: failure }),
       }
     }
     case 'user/message': {
@@ -210,17 +289,30 @@ export function foldEvent(view: StreamViewModel, frame: SseFrame): StreamViewMod
         retrievalEmpty: ids.length === 0 && payload?.status === 'empty',
       }
     }
-    case 'assistant/chunk': {
-      const { text, reasoning } = chunkText((data.payload ?? {}) as Record<string, unknown>)
+    // The 0.1.6 baseline carries the assistant stream as packed records on
+    // `assistant/attempt`; the per-delta `assistant/chunk` event it replaced
+    // no longer exists, so this is the only place streamed text arrives.
+    case 'assistant/attempt': {
+      const payload = (data.payload ?? {}) as Record<string, unknown>
+      const { text, reasoning } = attemptText(payload)
+      const failure = attemptFailure(payload)
       return {
         ...view,
         phase: 'llm',
-        assistantText: text === undefined ? view.assistantText : view.assistantText + text,
-        reasoningText: reasoning === undefined ? view.reasoningText : view.reasoningText + reasoning,
+        assistantText: text ?? view.assistantText,
+        reasoningText: reasoning ?? view.reasoningText,
+        ...(failure === undefined ? {} : { turnError: failure }),
       }
     }
-    case 'assistant/message':
-      return { ...view, phase: 'llm' }
+    // The completed assistant turn. Its `message.content` is the authoritative
+    // text — a provider that answers in one shot produces ONLY this event, with
+    // no `assistant/attempt` and no deltas — so the transcript must be read
+    // from here or a non-streaming answer renders as an empty bubble.
+    case 'assistant/message': {
+      const payload = data.payload as { message?: { content?: unknown } } | undefined
+      const text = contentText(payload?.message?.content)
+      return text === undefined ? { ...view, phase: 'llm' } : { ...view, phase: 'llm', assistantText: text }
+    }
     case 'approval/requested':
       return { ...view, phase: 'approval', pendingApprovals: view.pendingApprovals + 1 }
     case 'approval/resolved':

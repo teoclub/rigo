@@ -202,6 +202,8 @@ describe('local document provider (Issue 017)', () => {
         version: SESSION_FORMAT_VERSION,
         id: SessionId('session_docs_local'),
         createdAt: Date.now(),
+        // Required since the 0.1.6 baseline.
+        isSeeded: false,
         cwd: root,
       })
       const provider = new LocalDocumentProvider({ session })
@@ -209,7 +211,7 @@ describe('local document provider (Issue 017)', () => {
       const input = await provider.read(DocumentId('guide.md'))
       expect(input.content).toBe('# Guide')
       // The read is recorded with session, document and source identity.
-      const event = session.events.at(-1)!
+      const event = session.snapshotEvents().at(-1)!
       expect(event.type).toBe(DOCUMENT_READ_EVENT_TYPE)
       expect(event.data).toEqual({
         sessionId: 'session_docs_local',
@@ -236,6 +238,8 @@ describe('local document provider (Issue 017)', () => {
         version: SESSION_FORMAT_VERSION,
         id: SessionId('session_docs_local_b'),
         createdAt: Date.now(),
+        // Required since the 0.1.6 baseline.
+        isSeeded: false,
         cwd: rootA,
       })
       const provider = new LocalDocumentProvider({ root: rootB, session })

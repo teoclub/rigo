@@ -150,10 +150,10 @@ describe.skipIf(isBun)('rigo work base bundle (Node)', async () => {
         facade.sendMessage(created.sessionId, 'hello there', 'smoke-msg-1')
         const session = ctx.sessions.get(created.sessionId as never)
         const deadline = Date.now() + 10000
-        while (!session.events.some((event) => event.type === 'assistant/message') && Date.now() < deadline) {
+        while (!session.snapshotEvents().some((event) => event.type === 'assistant/message') && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 25))
         }
-        const answer = session.events.find((event) => event.type === 'assistant/message')
+        const answer = session.snapshotEvents().find((event) => event.type === 'assistant/message')
         expect(answer).toBeDefined()
         expect(JSON.stringify(answer!.data)).toContain('hello from the mock')
 
@@ -199,10 +199,10 @@ describe.skipIf(isBun)('rigo work base bundle (Node)', async () => {
         facade.sendMessage(sessionId, 'hello there', 'restart-msg-1')
         const session = handle.ctx.sessions.get(sessionId as never)
         const deadline = Date.now() + 10000
-        while (!session.events.some((event) => event.type === 'assistant/message') && Date.now() < deadline) {
+        while (!session.snapshotEvents().some((event) => event.type === 'assistant/message') && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 25))
         }
-        expect(session.events.some((event) => event.type === 'assistant/message')).toBe(true)
+        expect(session.snapshotEvents().some((event) => event.type === 'assistant/message')).toBe(true)
         // The live list already carries the creation title.
         const live = await facade.listSessions()
         expect(live.some((row) => row.sessionId === sessionId && row.title === 'across restarts')).toBe(true)
@@ -234,13 +234,13 @@ describe.skipIf(isBun)('rigo work base bundle (Node)', async () => {
         expect(resumed).toMatchObject({ sessionId, title: 'across restarts', agentStatus: 'idle' })
         // The replayed log is intact and the loop answers a new message.
         const session = handle.ctx.sessions.get(sessionId as never)
-        expect(session.events.some((event) => JSON.stringify(event.data).includes('first answer'))).toBe(true)
+        expect(session.snapshotEvents().some((event) => JSON.stringify(event.data).includes('first answer'))).toBe(true)
         facade.sendMessage(sessionId, 'still there', 'restart-msg-2')
         const deadline = Date.now() + 10000
-        while (!session.events.filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer')) && Date.now() < deadline) {
+        while (!session.snapshotEvents().filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer')) && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 25))
         }
-        expect(session.events.filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer'))).toBe(true)
+        expect(session.snapshotEvents().filter((event) => event.type === 'assistant/message').some((event) => JSON.stringify(event.data).includes('resumed answer'))).toBe(true)
         // Unknown ids stay undefined (the HTTP layer maps them to 404).
         await expect(facade.resumeSession('session_ghost')).resolves.toBeUndefined()
       } finally {

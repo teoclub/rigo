@@ -23,6 +23,11 @@
  * @module @teoclub/harness-loop-protocol
  */
 
+// These modules are protocol-verification machinery: no bundle mounts them and
+// every caller is a test (tests/integration/{loop,session}-protocol.spec.ts).
+// They inspect committed history by design, which is the upstream-sanctioned
+// use of the synchronous readers for test-side event inspection.
+
 import type { Context } from '@teoclub/cordis'
 import type { Session, SessionEvent, SessionId } from '@teoclub/harness-session'
 import type { PublicAgent } from '@teoclub/harness-agent-protocol'
@@ -63,7 +68,7 @@ export function turnSummary(session: Session): TurnSummary[] {
   const turns: TurnSummary[] = []
   let current: TurnSummary | undefined
   let step: StepSummary | undefined
-  for (const event of session.events) {
+  for (const event of session.snapshotEvents()) {
     if (event.type === 'turn/start') {
       current = { turn: event.data.turn, steps: [], userMessages: 0, reason: undefined, events: [] }
       turns.push(current)
@@ -75,8 +80,10 @@ export function turnSummary(session: Session): TurnSummary[] {
       current.steps.push(step)
     } else if (event.type === 'user/message') {
       current.userMessages += 1
-    } else if (event.type === 'assistant/chunk' && step !== undefined) {
-      step.chunks += 1
+    } else if (event.type === 'assistant/attempt' && step !== undefined) {
+      // 0.1.6 packs the whole attempt's streaming records onto one durable
+      // event, so the chunk count is the packed stream's length.
+      step.chunks += event.data.stream.length
     } else if (event.type === 'assistant/message' && step !== undefined) {
       step.assistantText = event.data.message.content
         .filter((block) => block.type === 'text')
@@ -114,7 +121,7 @@ export interface TurnRunResult {
  * @returns the turn projection and any choreography violations.
  */
 export async function runTurn(agent: PublicAgent, session: Session, text: string): Promise<TurnRunResult> {
-  const before = session.events.filter((event) => event.type === 'turn/start').length
+  const before = session.snapshotEvents().filter((event) => event.type === 'turn/start').length
   agent.send(text)
   await agent.whenIdle()
   const turns = turnSummary(session)
@@ -157,7 +164,7 @@ export function assertTurnChoreography(session: Session): TurnChoreographyViolat
     violations.push({ code, message, seq })
   }
 
-  for (const event of session.events) {
+  for (const event of session.snapshotEvents()) {
     switch (event.type) {
       case 'turn/start':
         openTurn = true
@@ -184,9 +191,9 @@ export function assertTurnChoreography(session: Session): TurnChoreographyViolat
         }
         openStep = undefined
         break
-      case 'assistant/chunk':
+      case 'assistant/attempt':
         if (openStep === undefined) {
-          fail('CHUNK_OUTSIDE_STEP', `assistant/chunk at seq ${event.seq} outside an open step`, event.seq)
+          fail('CHUNK_OUTSIDE_STEP', `assistant/attempt at seq ${event.seq} outside an open step`, event.seq)
         }
         break
       case 'assistant/message':
@@ -268,7 +275,7 @@ export async function sendSequential(
 ): Promise<TurnSummary[]> {
   const turns: TurnSummary[] = []
   for (const text of texts) {
-    const before = session.events.filter((event) => event.type === 'turn/start').length
+    const before = session.snapshotEvents().filter((event) => event.type === 'turn/start').length
     agent.send(text)
     await agent.whenIdle()
     turns.push(...turnSummary(session).slice(before))
@@ -289,7 +296,7 @@ export async function runConcurrentTurn(
   session: Session,
   texts: readonly string[],
 ): Promise<TurnSummary[]> {
-  const before = session.events.filter((event) => event.type === 'turn/start').length
+  const before = session.snapshotEvents().filter((event) => event.type === 'turn/start').length
   for (const text of texts) agent.send(text)
   await agent.whenIdle()
   return turnSummary(session).slice(before)

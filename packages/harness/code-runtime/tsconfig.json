@@ -9,7 +9,7 @@
   ],
   "references": [
     {
-      "path": "../invariants"
+      "path": "../sandbox"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

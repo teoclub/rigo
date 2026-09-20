@@ -24,6 +24,19 @@ import {
 import { SessionStore, SessionId, type AgentCancelCause, type Session } from '@teoclub/harness-session'
 import type { PublicAgent } from '@teoclub/harness-agent-protocol'
 
+/** Wire the facade's durable history reader to this harness's persistence. */
+function durableReader(ctx: Context) {
+  return async (id: string, fromSeq: number): Promise<{ events: readonly never[] } | undefined> => {
+    try {
+      const suffix = await ctx.sessionPersistence.readFromDurable(SessionId(id), fromSeq)
+      return { events: [...suffix.events] as readonly never[] }
+    } catch {
+      return undefined
+    }
+  }
+}
+
+
 const isBun = typeof Bun !== 'undefined'
 
 function makeFakeAgent(session: Session): {
@@ -60,7 +73,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
   it('creates, reads and closes sessions with projections', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
-    const facade = new RuntimeFacade(ctx, {
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
       agentFactory: (input) => {
         const session = ctx.sessions.create(undefined, {
           ...(input.cwd === undefined ? {} : { meta: { cwd: input.cwd } }),
@@ -91,7 +104,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     const handle = { current: undefined as { log: ReturnType<typeof makeFakeAgent>['log'] } | undefined }
-    const facade = new RuntimeFacade(ctx, {
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
       agentFactory: () => {
         const session = ctx.sessions.create(undefined, {})
         const made = makeFakeAgent(session)
@@ -119,7 +132,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
   it('streams session events and releases listeners on unsubscribe', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
-    const facade = new RuntimeFacade(ctx)
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx), readSessionFrom: durableReader(ctx) })
     const sdk = createInProcessSdk(facade)
     try {
       const created = await sdk.createSession({})
@@ -149,7 +162,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
     await ctx.plugin(SessionStore)
     const saved: Array<[string, FacadeApiFields]> = []
     let rows: FacadeSessionRow[] = []
-    const facade = new RuntimeFacade(ctx, {
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
       agentFactory: () => makeFakeAgent(ctx.sessions.create(undefined, {})),
       persistence: {
         listSessions: () => rows,
@@ -211,7 +224,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
       { id: 'session_resumed', status: 'active', providerId: 'mock', modelId: 'mock', title: 'Back from disk', eventCount: 2, lastSeq: 1, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     ]
     let made: ReturnType<typeof makeFakeAgent> | undefined
-    const facade = new RuntimeFacade(ctx, {
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
       persistence: {
         listSessions: () => rows,
         saveApiFields: () => {},
@@ -256,7 +269,7 @@ describe('runtime facade + in-process sdk (Issue 027)', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     let disposed = false
-    const facade = new RuntimeFacade(ctx, {
+    const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx),
       resumeAgent: () => ({
         agent: {
           id: SessionId('session_ghost'),
@@ -350,7 +363,7 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
       await ctx.plugin(m().SqliteSessionPersistence as never, { path, migrations: [...m().SESSION_PERSISTENCE_MIGRATIONS, ...m().ACTION_MIGRATIONS, ...m().APPROVAL_MIGRATIONS] })
       await ctx.plugin(m().ApprovalsService, { driver })
       await ctx.plugin(m().AuditService)
-      const facade = new RuntimeFacade(ctx)
+      const facade = new RuntimeFacade(ctx, { readSessionFrom: durableReader(ctx), readSessionFrom: durableReader(ctx) })
       const sdk = createInProcessSdk(facade)
 
       const pending = await ctx.approvals.create({
@@ -390,7 +403,7 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
       await firstCtx.plugin(SessionStore)
       await firstCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: [...m().SESSION_PERSISTENCE_MIGRATIONS, ...m().ACTION_MIGRATIONS, ...m().APPROVAL_MIGRATIONS] })
       await firstCtx.plugin(m().AuditService)
-      const facade = new RuntimeFacade(firstCtx)
+      const facade = new RuntimeFacade(firstCtx, { readSessionFrom: durableReader(firstCtx), readSessionFrom: durableReader(firstCtx) })
       const sdk = createInProcessSdk(facade)
       const created = await sdk.createSession({ cwd })
       const createdId = created.sessionId
@@ -401,8 +414,8 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
         content: [{ type: 'text', text: 'hello' }],
         source: { kind: 'user' },
       }), { surfaceOp: 'append' })
-      const projection = sdk.auditProjection(createdId)
-      expect(projection.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+      const projection = await sdk.auditProjection(createdId)
+      expect(projection.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
       expect(projection.some((entry) => entry.category === 'turn')).toBe(true)
       await firstCtx.sessions.flush(session)
       sessionId = createdId
@@ -416,7 +429,7 @@ describe.skipIf(isBun)('runtime facade with approvals/audit/persistence (Node)',
     try {
       await secondCtx.plugin(SessionStore)
       await secondCtx.plugin(m().SqliteSessionPersistence as never, { path, migrations: [...m().SESSION_PERSISTENCE_MIGRATIONS, ...m().ACTION_MIGRATIONS, ...m().APPROVAL_MIGRATIONS] })
-      const facade = new RuntimeFacade(secondCtx, {
+      const facade = new RuntimeFacade(secondCtx, { readSessionFrom: durableReader(secondCtx),
         loadSession: async (id) => {
           const loaded = await secondCtx.sessionPersistence.load(SessionId(id))
           const row = reader.query<{ workspace_root: string | null }>(

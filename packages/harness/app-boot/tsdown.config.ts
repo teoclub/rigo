@@ -1,6 +1,9 @@
 import { defineConfig } from 'tsdown'
 
-/** Ported build shape: each source entry becomes an independent ESM bundle. */
+/**
+ * Embed Include while keeping Loader external so the built include tree and
+ * app host bind to one Loader peer.
+ */
 export default defineConfig([
   {
     entry: ['lib/types/index.js'],
@@ -11,9 +14,12 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
+    deps: {
+      alwaysBundle: ['@teoclub/cordis-plugin-include'],
+    },
   },
   {
-    entry: ['lib/types/invariant.js'],
+    entry: { 'worker/profile-resolution-bootstrap': 'lib/types/profile-resolution/worker-bootstrap.js' },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
@@ -21,4 +27,8 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-  },])
+    deps: {
+      alwaysBundle: ['resolve.exports'],
+    },
+  },
+])

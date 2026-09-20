@@ -12,9 +12,6 @@
       "path": "../brand"
     },
     {
-      "path": "../invariants"
-    },
-    {
       "path": "../../../vendor/cordis/packages/cordis"
     }
   ]

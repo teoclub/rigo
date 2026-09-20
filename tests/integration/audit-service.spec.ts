@@ -28,6 +28,8 @@ function makeSession(id = 'session_audit'): Session {
     version: SESSION_FORMAT_VERSION,
     id: SessionId(id),
     createdAt: Date.now(),
+    // Required since the 0.1.6 baseline.
+    isSeeded: false,
   })
 }
 
@@ -115,7 +117,7 @@ describe('audit service (Issue 024)', () => {
         result: { written: true, token: 'res-token' },
         durationMs: 42,
       })
-      const facts = session.events.filter((event) => event.type === ACTION_EXECUTED_EVENT_TYPE)
+      const facts = session.snapshotEvents().filter((event) => event.type === ACTION_EXECUTED_EVENT_TYPE)
       expect(facts).toHaveLength(2)
       const done = facts[1]!.data
       expect(done).toMatchObject({ status: 'succeeded', durationMs: 42, executionId: 'action_e1' })
@@ -144,7 +146,7 @@ describe('audit service (Issue 024)', () => {
         decidedAt: '2026-08-25T10:00:00.000Z',
         handledBy: 'user@rigo',
       })
-      const event = session.events.at(-1)!
+      const event = session.snapshotEvents().at(-1)!
       expect(event.type).toBe(APPROVAL_AUDIT_EVENT_TYPE)
       expect(event.data).toMatchObject({
         approvalId: 'approval_a1',
@@ -183,7 +185,7 @@ describe('audit service (Issue 024)', () => {
       })).toThrow(TypeError)
       // The failed audit write MUST prevent the side effect from starting.
       expect(executed).toBe(0)
-      expect(session.events.some((event) => event.type === ACTION_EXECUTED_EVENT_TYPE)).toBe(false)
+      expect(session.snapshotEvents().some((event) => event.type === ACTION_EXECUTED_EVENT_TYPE)).toBe(false)
       // With a valid input the gate opens and the write proceeds.
       ctx.audit.recordActionExecution(session, {
         executionId: 'action_gate',
@@ -235,8 +237,10 @@ describe('audit service (Issue 024)', () => {
       })
       session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
 
-      const entries = ctx.audit.project(session)
-      expect(entries.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+      // The audit view is a full-history derivation: the caller supplies the
+      // events (in production, from a durable range read).
+      const entries = ctx.audit.project(session.id, session.snapshotEvents())
+      expect(entries.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
       // The session's end-seed marker projects as `other` (seq 0).
       expect(entries.map((entry) => entry.category)).toEqual([
         'other', 'turn', 'step', 'action', 'approval', 'turn',
@@ -276,7 +280,10 @@ describe('audit service (Issue 024)', () => {
       })
       a.append('document/read', { sessionId: 'session_a', documentId: 'docs/rockets.md', source: '/ws/docs/rockets.md' })
 
-      const entries = ctx.audit.projectAll([a, b])
+      const entries = await ctx.audit.projectAll(
+        [a, b],
+        async (id) => ({ events: [a, b].find((s) => s.id === id)?.snapshotEvents() ?? [] }),
+      )
       expect(entries.map((entry) => entry.sessionId)).toEqual([
         'session_a', 'session_a', 'session_a', 'session_a', 'session_b', 'session_b',
       ])
@@ -302,7 +309,8 @@ describe('audit service (Issue 024)', () => {
       // Unknown event types project as `other` with a stable summary.
       const weird = makeSession('session_weird')
       weird.append('todo/write', { entries: [] })
-      const other = ctx.audit.project(weird).find((entry) => entry.summary.includes('todo/write'))!
+      const other = ctx.audit.project(weird.id, weird.snapshotEvents())
+        .find((entry) => entry.summary.includes('todo/write'))!
       expect(other.category).toBe('other')
       expect(other.summary).toBe('event todo/write')
     } finally {

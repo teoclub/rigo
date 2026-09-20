@@ -1,4 +1,4 @@
-/** Package-owned approval audit-stream invariants. @module @deepseek-ai/dsh-user-approval/invariant */
+/** Package-owned approval audit-stream invariants. @module @teoclub/harness-user-approval/invariant */
 
 import type { Context } from '@teoclub/cordis'
 import type { Session, SessionEvent } from '@teoclub/harness-session'
@@ -6,7 +6,7 @@ import type { InvariantFailure, InvariantInstaller } from '@teoclub/harness-inva
 import type { ApprovalRequestId } from './index.ts'
 import { APPROVAL_POLICIES } from './index.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-user-approval'
+const PACKAGE_NAME = '@teoclub/harness-user-approval'
 const APPROVAL_OUTCOMES = ['allowed-once', 'rejected', 'cancelled', 'unavailable'] as const
 
 /** Cordis companion plugin name. */
@@ -64,7 +64,8 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   const seed = (session: Session): ApprovalTrace => {
     const trace: ApprovalTrace = { openTurn: null, pending: new Set() }
     traces.set(session, trace)
-    for (const event of session.events) {
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing Session history read; migration deferred.
+    for (const event of session.snapshotEvents()) {
       if (event.type === 'turn/start') trace.openTurn = event.data.turn
       else if (event.type === 'turn/end') trace.openTurn = null
       const transition = validateApprovalEvent(trace, event, fail)

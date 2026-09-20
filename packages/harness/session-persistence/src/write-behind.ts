@@ -1,6 +1,6 @@
 /**
  * Bounded per-session write batching for the shared persistence coordinator.
- * @module @deepseek-ai/dsh-session-persistence/write-behind
+ * @module @teoclub/harness-session-persistence/write-behind
  */
 
 import type { SessionEvent } from '@teoclub/harness-session'

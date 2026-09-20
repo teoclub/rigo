@@ -3,7 +3,7 @@
  * supplied each value. Harness consumers resolve through it instead of a flattened
  * `process.env`; launchers may still materialize accepted values for config
  * expressions and third-party libraries.
- * @module @deepseek-ai/dsh-launch-environment
+ * @module @teoclub/harness-launch-environment
  */
 
 import type { Context } from '@teoclub/cordis'
@@ -121,4 +121,17 @@ declare module '@teoclub/cordis' {
     /** Launcher-owned snapshot of this run's environment; absent in compositions the product CLI did not boot. */
     launchEnvironment?: LaunchEnvironmentSnapshot
   }
+}
+
+/**
+ * Detect SSH from non-empty SSH_CONNECTION or SSH_TTY inherited at launch.
+ * Project and user `.env` values never establish an SSH session.
+ * @param environment - the launcher's environment snapshot.
+ * @returns whether the inherited process layer carries either SSH marker.
+ */
+export function launchedThroughSsh(environment: LaunchEnvironmentSnapshot): boolean {
+  return ['SSH_CONNECTION', 'SSH_TTY'].some((name) => {
+    const value = environment.getFrom(name, ['process'])?.value
+    return value !== undefined && value !== ''
+  })
 }

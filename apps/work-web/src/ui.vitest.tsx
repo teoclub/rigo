@@ -35,11 +35,15 @@ function sessionSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnaps
   }
 }
 
-function chunkFrame(seq: number, text: string): SseFrame {
+function attemptFrame(seq: number, texts: string[]): SseFrame {
   return {
     id: seq,
     event: 'session.event',
-    data: { seq, type: 'assistant/chunk', payload: { turn: 1, step: 1, chunk: { type: 'text', text } } },
+    data: {
+      seq,
+      type: 'assistant/attempt',
+      payload: { turn: 1, step: 1, stream: [{ type: 'text-chunks', time0: 0, index: 0, dt: [], texts }] },
+    },
   }
 }
 
@@ -100,11 +104,13 @@ describe('work web components (Issue 033)', () => {
     expect(created).toMatchObject({ title: 'My plan', providerId: 'openai-compatible', cwd: '/tmp/ws' })
   })
 
-  it('streams assistant output incrementally and shows phases as text', async () => {
+  it('renders the assistant attempt stream and shows phases as text', async () => {
     const client = stubClient([
       { id: 0, event: 'session.event', data: { seq: 0, type: 'turn/start', payload: { turn: 1 } } },
-      chunkFrame(1, 'Hello '),
-      chunkFrame(2, 'Rigo'),
+      // Each attempt event carries the whole attempt so far, so the second
+      // frame repeats the first run's text rather than extending it.
+      attemptFrame(1, ['Hello ']),
+      attemptFrame(2, ['Hello ', 'Rigo']),
       retrievalFrame(3, 'found', ['sqlite-fts#docs/rockets.md#0']),
       { id: 4, event: 'session.event', data: { seq: 4, type: 'turn/end', payload: { turn: 1, reason: { kind: 'completed' } } } },
     ])
@@ -127,7 +133,7 @@ describe('work web components (Issue 033)', () => {
   it('supports keyboard navigation into the streaming and source regions', async () => {
     const client = stubClient([
       retrievalFrame(1, 'found', ['sqlite-fts#a.md#0', 'sqlite-fts#b.md#1']),
-      chunkFrame(2, 'answer'),
+      attemptFrame(2, ['answer']),
     ])
     render(<ChatView session={sessionSnapshot()} client={client} onDisconnected={() => undefined} />)
     await waitFor(() => expect(screen.getByTestId('source-s1')).toBeDefined())
@@ -251,7 +257,7 @@ describe('work web components (Issue 033)', () => {
   })
 
   it('app flow: create → chat, and open restores an existing session', async () => {
-    const client = stubClient([chunkFrame(1, 'restored answer')])
+    const client = stubClient([attemptFrame(1, ['restored answer'])])
     const { unmount } = render(<App client={client} />)
     expect(screen.queryByTestId('provider')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
@@ -300,7 +306,7 @@ describe('work web components (Issue 033)', () => {
   })
 
   it('auto-sends the initial chat message and treats a replay as success', async () => {
-    const client = stubClient([chunkFrame(1, 'first turn')])
+    const client = stubClient([attemptFrame(1, ['first turn'])])
     const sent: string[] = []
     client.sendMessage = async (_id, content) => {
       sent.push(content)

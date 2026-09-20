@@ -6,9 +6,11 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../../harness/agent" },
     { "path": "../../harness/context" },
     { "path": "../../harness/llm" },
     { "path": "../../harness/session" },
+    { "path": "../../harness/session-projection" },
     { "path": "../../shared/knowledge" },
     { "path": "../../../vendor/cordis/packages/cordis" }
   ]

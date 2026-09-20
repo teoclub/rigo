@@ -23,7 +23,7 @@
  */
 
 import {
-  CallId,
+  ToolCallId,
   LlmAdapter,
   LlmError,
   type GenerateOptions,
@@ -281,7 +281,7 @@ async function* convertStream(body: ReadableStream<Uint8Array> | null, options: 
               yield { type: 'block-start', index, blockType: 'tool-call' }
             }
             openBlock.arguments = (openBlock.arguments ?? '') + argumentsDelta
-            yield { type: 'tool-call-delta', index, id: CallId(id), name, argumentsDelta }
+            yield { type: 'tool-call-delta', index, id: ToolCallId(id), name, argumentsDelta }
           }
         }
         const finishReason = frame.choices?.[0]?.finish_reason
@@ -295,7 +295,7 @@ async function* convertStream(body: ReadableStream<Uint8Array> | null, options: 
                 index,
                 block: {
                   type: 'tool-call',
-                  id: CallId(openBlock.id ?? ''),
+                  id: ToolCallId(openBlock.id ?? ''),
                   name: openBlock.name ?? '',
                   arguments: openBlock.arguments ?? '',
                 },
@@ -328,7 +328,7 @@ async function* convertStream(body: ReadableStream<Uint8Array> | null, options: 
       yield {
         type: 'block-end',
         index,
-        block: { type: 'tool-call', id: CallId(openBlock.id ?? ''), name: openBlock.name ?? '', arguments: openBlock.arguments ?? '' },
+        block: { type: 'tool-call', id: ToolCallId(openBlock.id ?? ''), name: openBlock.name ?? '', arguments: openBlock.arguments ?? '' },
       }
     }
   }

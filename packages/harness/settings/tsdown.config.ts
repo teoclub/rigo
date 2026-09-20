@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown'
 
-/** Ported build shape: each source entry becomes an independent ESM bundle. */
+/** Build the package root and optional invariant companion as independent bundles. */
 export default defineConfig([
   {
     entry: ['lib/types/index.js'],
@@ -21,4 +21,5 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-  },])
+  },
+])

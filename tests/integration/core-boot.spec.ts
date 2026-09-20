@@ -29,6 +29,9 @@ describe('minimal Rigo Core boot (Issue 004)', () => {
       'SystemPrompt',
       'ToolRuntime',
       'AgentRegistry',
+      // The 0.1.6 loop requires `sessionProjections`, so the registry mounts
+      // between the agent registry and the loop.
+      'SessionProjectionRegistry',
       'AgentLoop',
     ])
   })
@@ -45,7 +48,9 @@ describe('minimal Rigo Core boot (Issue 004)', () => {
         expect(handle.ctx.get(absent), `layer-2/3 service ${absent}`).toBeUndefined()
       }
       // The agent loop is immediately usable.
-      const agent = handle.ctx.agentLoop.create(SessionId('fresh'), { provider: 'mock', model: 'mock' })
+      // `AgentLoop.create` is async at the 0.1.6 baseline; awaiting it also keeps
+      // its startup work inside the test's lifetime instead of racing dispose.
+      const agent = await handle.ctx.agentLoop.create(SessionId('fresh'), { provider: 'mock', model: 'mock' })
       expect(agent.status).toBe('idle')
       await agent.whenIdle()
     } finally {

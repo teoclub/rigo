@@ -2,17 +2,49 @@
  * Durable session-persistence Service Definition (`ctx.sessionPersistence`). Backends store
  * {@link SessionEvent}s as the event-sourced log and carry non-replayable
  * {@link SessionHeader} metadata separately.
- * @module @deepseek-ai/dsh-session-persistence
+ * @module @teoclub/harness-session-persistence
  */
 
 import { Context, Service } from '@teoclub/cordis'
 import { SessionPreparation } from '@teoclub/harness-session'
+import { SessionLogOffset } from '@teoclub/harness-session'
 import type { SessionEvent, SessionId, SessionHeader } from '@teoclub/harness-session'
 import type { SessionPersistenceRevision } from './revision.ts'
+import type { SessionLocation } from './errors.ts'
+import type { SessionAccess, SessionHandle } from './handle.ts'
 
 // Re-export the metadata vocabulary so Consumers import it from the Service Definition.
 export type { SessionHeader } from '@teoclub/harness-session'
 export { SessionPersistenceRevision } from './revision.ts'
+
+/** Options accepted by {@link SessionPersistence.create}. */
+export interface SessionPersistenceCreateOptions {
+  /** Optional cancellation observed before backend work starts. */
+  readonly signal?: AbortSignal
+  /**
+   * Exact fork-inherited prefix length. Required when `header.isSeeded` is
+   * true and must be omitted (or `0`) otherwise.
+   */
+  readonly inheritedEventCount?: SessionLogOffset
+}
+
+/** Options for {@link SessionPersistence.open}. */
+export interface SessionPersistenceOpenOptions {
+  /** Optional cancellation observed before backend work starts. */
+  readonly signal?: AbortSignal
+}
+
+/** Options for {@link SessionPersistence.stat}. */
+export interface SessionPersistenceStatOptions {
+  /** Optional cancellation for backend work. */
+  readonly signal?: AbortSignal
+}
+
+/** Options for {@link SessionPersistence.list}. */
+export interface SessionPersistenceListOptions {
+  /** Optional cancellation for backend listing work. */
+  readonly signal?: AbortSignal
+}
 
 /** Lightweight immutable source identity returned without loading a full log. */
 export interface SessionPersistenceSnapshot {
@@ -80,10 +112,38 @@ export {
   DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
   MAX_WRITE_BATCH_DELAY_MS,
   PersistenceCoordinator,
-  SessionFormatUnsupportedError,
-  SessionPersistenceCorruptionError,
-  sessionFormatVersionRefusal,
 } from './coordinator.ts'
+// The 0.1.6 baseline moved the shared error vocabulary into errors.ts and the
+// handle contract into handle.ts; both are re-exported here so consumers
+// import them from the Service Definition, as the pin's index does.
+export type {
+  SessionAccess,
+  SessionHandle,
+  SessionHandleAppendOptions,
+  SessionHandleFlushOptions,
+  SessionHandleReadOptions,
+  SessionHandleReadResult,
+} from './handle.ts'
+export {
+  SessionAlreadyExistsError,
+  SessionAlreadyOwnedError,
+  SessionFormatUnsupportedError,
+  SessionHandleClosedError,
+  SessionOwnershipLostError,
+  SessionPersistenceCorruptionError,
+  SessionPersistenceNotFoundError,
+  SessionReadOnlyError,
+  sessionFormatVersionRefusal,
+} from './errors.ts'
+export type { SessionLocation } from './errors.ts'
+export {
+  assertContiguous,
+  assertStoredId,
+  assertVersion,
+  materializeAppendBatch,
+  materializeCreateHeader,
+  validateStoredEvents,
+} from './storage-contract.ts'
 export type {
   PersistenceBackend,
   PersistenceCoordinatorOptions,
@@ -95,18 +155,6 @@ declare module '@teoclub/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
   }
-}
-
-/**
- * A backend-resolved, per-session local artifact location. The path is an
- * absolute target path and can name an artifact that has not materialized yet.
- * Consumers must treat it as a location hint, never as an authorization token.
- */
-export interface SessionLocation {
-  /** Backend-specific artifact kind, for example `jsonl`. */
-  readonly kind: string
-  /** Absolute path to this session's backend-owned artifact. */
-  readonly path: string
 }
 
 /**
@@ -159,12 +207,49 @@ export abstract class SessionPersistence extends Service {
 
   /**
    * Register a new session's metadata. A backend MAY defer the physical write
-   * until the first {@link append} (lazy materialization), in which case a
-   * created-but-never-appended session is absent from {@link list}
-   * — abandoned sessions leave nothing behind.
+   * until the first {@link SessionHandle.append} (lazy materialization), in
+   * which case a created-but-never-appended session is absent from
+   * {@link listSnapshots} — abandoned sessions leave nothing behind.
    * @param meta - the immutable header (id, version, cwd, lineage) to record.
+   * @param options - optional cancellation and the exact fork-inherited prefix.
+   * @returns a `write` handle the caller owns until it closes it.
    */
-  abstract create(meta: SessionHeader): Promise<void>
+  abstract create(meta: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle>
+
+  /**
+   * Open an existing stored session.
+   *
+   * `read` never takes ownership and works while another handle holds `write`.
+   * `write` claims single-writer ownership; an existing active owner rejects
+   * with {@link SessionAlreadyOwnedError}, which is what lets a resume exclude
+   * a concurrent one for the same id.
+   * @param id - the stored session to open.
+   * @param access - `read` or `write`.
+   * @param options - optional cancellation.
+   * @returns the open handle.
+   * @throws {SessionPersistenceNotFoundError} when the session does not exist.
+   * @throws {SessionAlreadyOwnedError} for `write` when ownership is taken.
+   */
+  abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>
+
+  /**
+   * Observe one stored session without reading its event log or taking
+   * ownership: its header plus the opaque token that changes whenever the log
+   * does. A caller polls this to notice external writers cheaply.
+   * @param id - the stored session to observe.
+   * @param options - optional cancellation for backend work.
+   * @returns the header and change token, or `undefined` when the session is absent.
+   */
+  abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined>
+
+  /**
+   * Flush every active write handle owned by this service in one durability
+   * barrier. A backend that buffers nothing has nothing to drain.
+   * @returns resolution once every write handle active at the call has flushed.
+   */
+  flush(): Promise<void> {
+    return Promise.resolve()
+  }
 
   /**
    * Durably persist a batch of events. Honors the append-only and contiguous-
@@ -197,7 +282,9 @@ export abstract class SessionPersistence extends Service {
     return SessionPreparation.create(sessions.prepare(id, {
       seed: loaded.events.map(event => structuredClone(event)),
       meta: structuredClone(loaded.meta),
-      seedSource: 'persistence',
+      // Storage-restore variant (see the coordinator's prepare path).
+      inheritedEventCount: SessionLogOffset(0),
+      eventState: 'detached',
     }))
   }
 
@@ -255,23 +342,43 @@ export abstract class SessionPersistence extends Service {
   Promise<{ meta: SessionHeader; events: SessionEvent[] }>
 
   /**
-   * Lightweight listing from metadata, without a full-log parse.
-   * @param signal - optional cancellation for backend listing work.
-   * @returns one header per materialized session.
+   * Read a DURABLE suffix: like {@link readFrom}, but first drains this
+   * backend's pending writes for the session, so the returned events include
+   * everything appended before the call.
+   *
+   * `readFrom` reads the stored prefix only. A backend that buffers writes
+   * (the shared coordinator batches through a write-behind controller) can
+   * therefore serve a suffix that is behind the live log, which is silent
+   * data loss for a consumer that replays forward from a watermark — the SSE
+   * resumption path subscribes before replaying, so events still sitting in
+   * the batch queue appear in neither the replay nor the concurrent buffer.
+   *
+   * The base implementation has nothing to drain and delegates to
+   * {@link readFrom}; a buffering backend overrides it.
+   * @param id - the persisted session to read.
+   * @param fromSeq - first event seq to include; a non-negative safe integer.
+   * @param signal - optional cancellation for queued, drain, and read work.
+   * @returns the header and the durably stored events with `seq >= fromSeq`.
    */
-  abstract list(signal?: AbortSignal): Promise<SessionHeader[]>
+  readFromDurable(id: SessionId, fromSeq: number, signal?: AbortSignal):
+  Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    return this.readFrom(id, fromSeq, signal)
+  }
 
   /**
-   * List materialized sessions with cheap per-log change tokens.
+   * List every stored session visible to this process with a cheap per-log
+   * change token, in no promised order.
    *
-   * Repeated observations of an unchanged log return the same revision. A
-   * successful mutating {@link load} repair changes the next listed revision.
-   * Revisions also distinguish independently backed stores so backend-local
-   * counters cannot compare equal across different persistence sources.
-   * @param signal - optional cancellation for backend snapshot-listing work.
-   * @returns one header and opaque revision per materialized session without loading full logs.
+   * A listing is metadata-only: the header and revision come from the stored
+   * index, never a full-log parse. Repeated observations of an unchanged log
+   * return the same revision. A successful mutating {@link load} repair changes
+   * the next listed revision. Revisions also distinguish independently backed
+   * stores so backend-local counters cannot compare equal across different
+   * persistence sources.
+   * @param options - optional cancellation for backend listing work.
+   * @returns one snapshot per stored session without loading full logs.
    */
-  abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>
+  abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>
 
   /**
    * Upsert API-layer presentation fields (provider/model/title) for one

@@ -26,7 +26,7 @@ import { join, resolve, relative } from 'node:path'
 import { BASELINE, LOCAL_PACKAGES, NOT_PORTED, PACKAGES } from './lib/baseline.ts'
 import { portSourceFile, portTestFile } from './port-upstream.ts'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 const auditPath = join(root, 'docs/harness-upstream-audit.json')
 
 let failures = 0

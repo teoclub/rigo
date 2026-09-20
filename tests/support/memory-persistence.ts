@@ -1,10 +1,17 @@
 import { Context } from '@teoclub/cordis'
-import { SessionId, isJsonValue, type SessionEvent, type SessionHeader } from '@teoclub/harness-session'
+import { SessionId, type SessionEvent, type SessionHeader } from '@teoclub/harness-session'
+import { isJsonValue } from '@teoclub/harness-values'
 import {
   PersistenceCoordinator,
   SessionPersistence,
   SessionPersistenceRevision,
   type PersistenceBackend,
+  type SessionAccess,
+  type SessionHandle,
+  type SessionPersistenceCreateOptions,
+  type SessionPersistenceListOptions,
+  type SessionPersistenceStatOptions,
+  type SessionPersistenceOpenOptions,
   type SessionPersistenceSnapshot,
   type StoredPrefix,
 } from '@teoclub/harness-session-persistence'
@@ -69,8 +76,20 @@ export default class MemoryPersistence extends SessionPersistence implements Per
     return undefined
   }
 
-  create(m: SessionHeader): Promise<void> {
-    return this.coordinator.create(m)
+  create(m: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
+    return this.coordinator.create(m, options)
+  }
+
+  open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+    return this.coordinator.open(id, access, options)
+  }
+
+  override readFromDurable(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    return this.coordinator.readFromDurable(id, fromSeq, signal)
+  }
+
+  stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined> {
+    return this.coordinator.stat(id, options)
   }
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
@@ -137,16 +156,17 @@ export default class MemoryPersistence extends SessionPersistence implements Per
     if (closers.length > 0) entry.events.push(...structuredClone(closers) as SessionEvent[])
   }
 
-  async list(signal?: AbortSignal): Promise<SessionHeader[]> {
+  async list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]> {
+    const signal = options?.signal
     signal?.throwIfAborted()
-    return [...this.store.values()].map(e => structuredClone(e.meta))
-  }
-
-  async listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]> {
-    signal?.throwIfAborted()
-    return [...this.store.values()].map(entry => ({
-      header: structuredClone(entry.meta),
-      revision: memoryRevision(entry),
-    }))
+    return [
+      // A created-but-unappended session lives only in the coordinator until
+      // its first append, so the store above cannot see it.
+      ...this.coordinator.pendingSnapshots(),
+      ...[...this.store.values()].map(entry => ({
+        header: structuredClone(entry.meta),
+        revision: memoryRevision(entry),
+      })),
+    ]
   }
 }

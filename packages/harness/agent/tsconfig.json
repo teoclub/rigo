@@ -24,7 +24,13 @@
       "path": "../session"
     },
     {
+      "path": "../session-projection"
+    },
+    {
       "path": "../system-prompt"
+    },
+    {
+      "path": "../values"
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"

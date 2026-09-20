@@ -22,9 +22,9 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "packages/core/agent-default-model",
       "upstreamPackage": "@deepseek-ai/dsh-agent-default-model",
-      "upstreamVersion": "0.1.1-rc.2",
-      "commit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
-      "classification": "KEEP"
+      "upstreamVersion": "0.1.6-alpha.1",
+      "commit": "0a15e36e7f82b6ed45af6fa9759f29b40dcd965d",
+      "classification": "ADAPT"
     }
   },
   "exports": {
@@ -33,11 +33,6 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./invariant": {
-      "development": "./src/invariant.ts",
-      "types": "./lib/types/invariant.d.ts",
-      "default": "./lib/invariant.js"
-    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -45,7 +40,6 @@
     "@teoclub/schemastery": "*"
   },
   "peerDependencies": {
-    "@teoclub/harness-invariants": "*",
     "@teoclub/harness-settings": "*",
     "@teoclub/harness-agent": "*",
     "@teoclub/harness-llm": "*",
@@ -53,7 +47,6 @@
   },
   "files": [
     "lib/index.js",
-    "lib/invariant.js",
     "lib/types/**/*.d.ts"
   ]
 }

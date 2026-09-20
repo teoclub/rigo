@@ -15,10 +15,10 @@
       "path": "../agent-loop"
     },
     {
-      "path": "../home-paths"
+      "path": "../atomic-write"
     },
     {
-      "path": "../invariants"
+      "path": "../home-paths"
     },
     {
       "path": "../launch-environment"
@@ -27,7 +27,13 @@
       "path": "../llm"
     },
     {
+      "path": "../package-manifest"
+    },
+    {
       "path": "../session"
+    },
+    {
+      "path": "../session-projection"
     },
     {
       "path": "../system-prompt"

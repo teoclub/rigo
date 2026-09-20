@@ -126,7 +126,7 @@ describe.skipIf(isBun)('sqlite session persistence (Issue 008)', () => {
     await ctx.plugin(SqliteSessionPersistence as never, { path })
     try {
       const id = SessionId('session_atomic')
-      const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id, createdAt: 1 }
+      const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id, createdAt: 1, isSeeded: false }
       const persistence = ctx.get('sessionPersistence') as unknown as {
         create(meta: SessionHeader): Promise<void>
         appendBatch(meta: SessionHeader, events: readonly SessionEvent[], materialized: boolean): Promise<void>
@@ -223,7 +223,7 @@ describe.skipIf(isBun)('sqlite session persistence (Issue 008)', () => {
       // semantics), so the comparison is on the projection, not the marker.
       const replayed = Session.create(id, loaded.events)
       expect(replayed.deriveMessages()).toEqual(historyBefore)
-      expect(replayed.events.slice(0, 4)).toEqual([...firstSession.events])
+      expect(replayed.snapshotEvents().slice(0, 4)).toEqual([...firstSession.snapshotEvents()])
     } finally {
       await secondCtx.fiber.dispose()
       rmSync(dir, { recursive: true, force: true })
@@ -241,7 +241,7 @@ describe.skipIf(isBun)('sqlite session persistence (Issue 008)', () => {
     await ctx.plugin(SqliteSessionPersistence as never, { path })
     try {
       const id = SessionId('session_100k')
-      const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id, createdAt: 1 }
+      const header: SessionHeader = { version: SESSION_FORMAT_VERSION, id, createdAt: 1, isSeeded: false }
       const persistence = ctx.get('sessionPersistence') as unknown as {
         create(meta: SessionHeader): Promise<void>
       } & { appendBatch(meta: SessionHeader, events: readonly SessionEvent[], materialized: boolean): Promise<void> }
@@ -330,8 +330,8 @@ describe.skipIf(isBun)('sqlite session persistence (Issue 008)', () => {
       }
       const a = SessionId('session_a')
       const b = SessionId('session_b')
-      const headerA: SessionHeader = { version: SESSION_FORMAT_VERSION, id: a, createdAt: 1, cwd: '/tmp/ws-a' }
-      const headerB: SessionHeader = { version: SESSION_FORMAT_VERSION, id: b, createdAt: 2, cwd: '/tmp/ws-b' }
+      const headerA: SessionHeader = { version: SESSION_FORMAT_VERSION, id: a, createdAt: 1, isSeeded: false, cwd: '/tmp/ws-a' }
+      const headerB: SessionHeader = { version: SESSION_FORMAT_VERSION, id: b, createdAt: 2, isSeeded: false, cwd: '/tmp/ws-b' }
       await persistence.create(headerA)
       await persistence.appendBatch(headerA, [
         { type: 'turn/start' as const, seq: 0, time: 1, data: { turn: 1 } },

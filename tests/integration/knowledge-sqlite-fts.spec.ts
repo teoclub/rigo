@@ -221,6 +221,47 @@ describe.skipIf(isBun)('sqlite-fts knowledge provider (Node)', () => {
     }
   })
 
+  it('retrieves a natural-language question whose words the corpus lacks', async () => {
+    const { NodeSqliteDriver } = await import('@teoclub/shared-storage-sqlite-node/node') as typeof import('@teoclub/shared-storage-sqlite-node/node')
+    const { runMigrations } = await import('@teoclub/shared-storage-sqlite-node/definition') as typeof import('@teoclub/shared-storage-sqlite-node/definition')
+    const { default: SqliteFtsKnowledgeProvider } = await import('@teoclub/shared-knowledge-sqlite-fts') as typeof import('@teoclub/shared-knowledge-sqlite-fts')
+    const { KNOWLEDGE_MIGRATIONS } = await import('@teoclub/shared-knowledge-sqlite-fts') as typeof import('@teoclub/shared-knowledge-sqlite-fts')
+    const { DOCUMENTS_MIGRATIONS } = await import('@teoclub/work-documents') as typeof import('@teoclub/work-documents')
+    const dir = tempDir()
+    const driver = new NodeSqliteDriver(join(dir, 'rigo.sqlite'))
+    try {
+      runMigrations(driver, { migrations: [...DOCUMENTS_MIGRATIONS, ...KNOWLEDGE_MIGRATIONS] })
+      const provider = new SqliteFtsKnowledgeProvider({ driver })
+      seedDocument(driver, 'knowledge.md')
+      await provider.indexDocuments([
+        { documentId: 'knowledge.md', documentVersion: 1, title: 'Knowledge', body: '# Knowledge\n\n- Rockets use fuel for thrust.\n' },
+      ])
+
+      // "what" and "do" occur nowhere in the corpus. Requiring every term —
+      // FTS5's implicit AND — matched nothing, which is to say every
+      // natural-language question asked of the knowledge base.
+      const question = await provider.retrieve({ query: 'What do rockets use for thrust?' })
+      expect(question.map((result) => result.sourceId)).toEqual(['knowledge.md'])
+
+      // Precision survives: a question with no term in the corpus still misses.
+      expect(await provider.retrieve({ query: 'what do zebras eat?' })).toEqual([])
+
+      // BM25 still prefers the chunk matching more of the query terms, so OR
+      // does not flatten relevance. Equal-length bodies isolate term coverage.
+      seedDocument(driver, 'both.md')
+      seedDocument(driver, 'one.md')
+      await provider.indexDocuments([
+        { documentId: 'both.md', documentVersion: 1, title: 'Both', body: 'rockets thrust alpha bravo charlie delta' },
+        { documentId: 'one.md', documentVersion: 1, title: 'One', body: 'rockets zulu yankee xray whiskey victor' },
+      ])
+      const ranked = await provider.retrieve({ query: 'rockets thrust' })
+      expect(ranked[0]!.sourceId).toBe('both.md')
+    } finally {
+      driver.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('updates and deletes documents from the index with version marking', async () => {
     const { NodeSqliteDriver } = await import('@teoclub/shared-storage-sqlite-node/node') as typeof import('@teoclub/shared-storage-sqlite-node/node')
     const { runMigrations } = await import('@teoclub/shared-storage-sqlite-node/definition') as typeof import('@teoclub/shared-storage-sqlite-node/definition')

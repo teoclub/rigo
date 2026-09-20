@@ -15,6 +15,9 @@ blob-report/
 # Local dev state (bun run dev: SQLite databases + demo workspace)
 .local/
 
+# Production CLI state (bun run start: the `rigo` data dir)
+.rigo/
+
 # Logs and OS noise
 *.log
 .DS_Store

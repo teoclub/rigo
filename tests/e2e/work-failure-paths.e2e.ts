@@ -114,7 +114,7 @@ async function waitForEvent(
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const session = harness.ctx.sessions.get(SessionId(sessionId))
-    if (session?.events.some((event) => predicate(event as never)) === true) return
+    if (session?.snapshotEvents().some((event) => predicate(event as never)) === true) return
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
   throw new Error(`session "${sessionId}" never matched the event predicate in time`)
@@ -226,7 +226,7 @@ test('denial: target document unchanged, UI + audit show the structured denial',
 
     // The session log carries the structured denial resolution event.
     const session = harness.ctx.sessions.get(SessionId(uiSessionId(harness)))!
-    const resolved = session.events.find((event) => event.type === 'approval/resolved')
+    const resolved = session.snapshotEvents().find((event) => event.type === 'approval/resolved')
     expect(resolved).toBeDefined()
     expect((resolved!.data as { outcome?: string }).outcome).toBe('denied')
   } finally {
@@ -283,7 +283,7 @@ test('version conflict: an external edit during the approval wait is never overw
 
     // The failure is audit-visible with the structured code.
     const session = harness.ctx.sessions.get(SessionId(sessionId))!
-    const executed = session.events.find((event) => event.type === 'action/executed' && event.data.status === 'failed')
+    const executed = session.snapshotEvents().find((event) => event.type === 'action/executed' && event.data.status === 'failed')
     expect(executed).toBeDefined()
   } finally {
     await harness.dispose()
@@ -379,8 +379,8 @@ test('SSE reconnect: no event loss, UI projection matches the persisted session'
     await waitForEvent(harness, sessionId, (event) => event.type === 'turn/end'
       && ((event.data as { turn?: number }).turn ?? 0) === 2)
     const session = harness.ctx.sessions.get(SessionId(sessionId))!
-    const total = session.events.length
-    const finalSeq = session.events[total - 1]!.seq
+    const total = session.snapshotEvents().length
+    const finalSeq = session.snapshotEvents()[total - 1]!.seq
 
     // Reconnect with Last-Event-ID: the server replays strictly after it.
     stream2 = openSse(harness.baseUrl, sessionId, lastId)
@@ -399,19 +399,19 @@ test('SSE reconnect: no event loss, UI projection matches the persisted session'
       const seq = frame.data.seq as number
       expect(seen.has(seq)).toBe(false)
       seen.add(seq)
-      expect(frame.data.type).toBe(session.events[seq]!.type)
+      expect(frame.data.type).toBe(session.snapshotEvents()[seq]!.type)
     }
-    expect(seen.size).toBe(session.events.length)
+    expect(seen.size).toBe(session.snapshotEvents().length)
 
     // The UI projection (what the page renders) agrees with the live log…
     const projection = await harness.facade.auditProjection(sessionId)
-    expect(projection.map((entry) => entry.seq)).toEqual(session.events.map((event) => event.seq))
+    expect(projection.map((entry) => entry.seq)).toEqual(session.snapshotEvents().map((event) => event.seq))
     // …and with the PERSISTED log once the write-behind drains.
     await new Promise((resolve) => setTimeout(resolve, 600))
     const driver = new NodeSqliteDriver(join(harness.dataDir, 'session.sqlite'))
     const rows = driver.query<{ n: number }>('SELECT COUNT(*) AS n FROM session_events WHERE session_id = ?', [sessionId])[0]!.n
     driver.close()
-    expect(rows).toBe(session.events.length)
+    expect(rows).toBe(session.snapshotEvents().length)
   } finally {
     stream1?.abort()
     stream2?.abort()
@@ -516,13 +516,13 @@ test('credentials: the secret marker never appears in any surface', async ({ pag
 
     // The turn failed with a SAFE structured reason.
     const session = harness.ctx.sessions.get(SessionId(uiSessionId(harness)))!
-    const turnEnd = [...session.events].reverse().find((event) => event.type === 'turn/end')
+    const turnEnd = [...session.snapshotEvents()].reverse().find((event) => event.type === 'turn/end')
     expect(turnEnd).toBeDefined()
     const reason = (turnEnd!.data as { reason: { kind: string; error?: { message: string; code: string } } }).reason
     expect(reason.kind).toBe('error')
 
     // Every surface is clean of the marker.
-    const eventText = JSON.stringify(session.events)
+    const eventText = JSON.stringify(session.snapshotEvents())
     const auditText = JSON.stringify(await harness.facade.auditProjection(uiSessionId(harness)))
     const pageText = await page.locator('body').innerText()
     expect(eventText).not.toContain(E2E_SECRET_MARKER)
@@ -644,7 +644,7 @@ test('session deletion: an active turn is aborted and resources are released', a
       body: JSON.stringify({ clientMessageId: 'hang-1', content: 'start' }),
     })
     await waitForEvent(harness, sessionId, (event) => event.type === 'step/start')
-    const liveCountBefore = harness.ctx.sessions.get(SessionId(sessionId))!.events.length
+    const liveCountBefore = harness.ctx.sessions.get(SessionId(sessionId))!.snapshotEvents().length
 
     // DELETE the session: the live agent is aborted, its turn unwinds, the
     // write-behind drains, and only THEN the agent (and its folded session

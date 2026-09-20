@@ -22,7 +22,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { NOT_PORTED, PACKAGES } from './lib/baseline.ts'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 const checkOnly = process.argv.includes('--check')
 const auditPath = join(root, 'docs/harness-upstream-audit.json')
 const matrixPath = join(root, 'docs/compatibility-matrix.md')
@@ -162,7 +162,6 @@ if (adaptedPackages.length) {
 }
 lines.push('', '## Per-package test mapping', '')
 for (const pkg of [...byPkg.keys()].sort()) {
-  const record = byPackage.get(pkg)!
   const spec = PACKAGES.find((p) => p.localPackage === pkg)!
   lines.push(`### ${pkg}`, '')
   lines.push(`| Upstream package | Upstream path | Local path | Classification |`)

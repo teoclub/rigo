@@ -296,7 +296,11 @@ export class SqliteFtsKnowledgeProvider implements KnowledgeProvider {
     const indexVersion = this.getIndexVersion()
 
     const where: string[] = ['knowledge_fts MATCH ?']
-    const params: unknown[] = [terms.join(' ')]
+    // OR, never FTS5's implicit AND: a question carries words the corpus
+    // simply does not have ("what", "do"), and AND-ing every term makes one
+    // unknown word zero out the whole match. BM25 still ranks a chunk that
+    // hits more of the query terms above one that hits a single term.
+    const params: unknown[] = [terms.join(' OR ')]
     if (validated.filter?.documentPath !== undefined) {
       where.push('kc.document_id = ?')
       params.push(validated.filter.documentPath)
@@ -422,12 +426,16 @@ export class SqliteFtsKnowledgeProvider implements KnowledgeProvider {
   }
 }
 
-/** Deterministic FTS5 term tokenization: lowercase Unicode words. */
+/**
+ * Deterministic FTS5 term tokenization: lowercase Unicode words.
+ *
+ * Double quotes make every term a literal phrase, so user punctuation can
+ * never alter the FTS5 query grammar. De-duplication keeps the MATCH string
+ * canonical. The caller joins the terms with OR — see `retrieve` for why an
+ * implicit AND is wrong for natural-language questions.
+ */
 export function tokenizeQuery(query: string): string[] {
   const tokens = Array.from(query.toLowerCase().matchAll(/[\p{L}\p{N}_]+/gu), (match) => match[0])
-  // Double quotes make every term a literal phrase, so user punctuation can
-  // never alter the FTS5 query grammar; joining with spaces is an implicit
-  // AND. De-duplication keeps the MATCH string canonical.
   return [...new Set(tokens)].map((token) => `"${token}"`)
 }
 

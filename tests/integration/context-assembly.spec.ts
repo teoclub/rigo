@@ -102,7 +102,7 @@ describe('Rigo context assembly (Issue 011)', () => {
       const session = ctx.sessions.create(SessionId('session_ctx_events'))
       const result = await ctx.context.assemble(session)
 
-      const events = session.events.filter((event) => event.type === CONTEXT_EVENT_TYPE)
+      const events = session.snapshotEvents().filter((event) => event.type === CONTEXT_EVENT_TYPE)
       expect(events.map((event) => (event.data as { contributorId: string }).contributorId))
         .toEqual(['history', 'injection'])
       expect(events.map((event) => (event.data as { order: number }).order))
@@ -160,8 +160,8 @@ describe('Rigo context assembly (Issue 011)', () => {
       await expect(failure).rejects.toThrow(/contributor "exploding" failed/)
       // No contribution event for the failed contributor; the assembly
       // rejected as a whole instead of returning a partial context.
-      expect(session.events.filter((event) => event.type === CONTEXT_EVENT_TYPE).length).toBe(1)
-      expect((session.events.at(-1)!.data as { contributorId: string }).contributorId).toBe('ok-first')
+      expect(session.snapshotEvents().filter((event) => event.type === CONTEXT_EVENT_TYPE).length).toBe(1)
+      expect((session.snapshotEvents().at(-1)!.data as { contributorId: string }).contributorId).toBe('ok-first')
     } finally {
       await dispose()
     }

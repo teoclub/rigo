@@ -859,6 +859,11 @@ code, pre, kbd {
   flex: none;
   border-top: 1px solid var(--warn-border);
   background: var(--warn-soft);
+  /* The panel sits inside `.main`, which paints a light foreground for its
+     green stage. A light surface must restate its own foreground or the text
+     inherits that near-white and disappears — in light mode only, because
+     `--surface` is what turns dark. */
+  color: var(--text);
   padding: var(--space-4) var(--space-6);
 }
 
@@ -885,6 +890,10 @@ code, pre, kbd {
 }
 
 .approval-card {
+  /* Same reason as `.approvals`: a light card inside `.main` must own its
+     foreground. Without this, the title and every `dd` that does not set a
+     colour of its own (Target, Impact, Expires) render white-on-white. */
+  color: var(--text);
   background: var(--surface);
   border: 1px solid var(--warn-border);
   border-left: 3px solid var(--warn);
@@ -966,6 +975,35 @@ code, pre, kbd {
   backdrop-filter: blur(18px);
 }
 
+/* The model-selection plugin injects a "provider · model" pair into the
+   composer bar. It is a flex sibling of the message box, so it must stay
+   shrinkable: without an explicit basis the two compact inputs size to their
+   default width, overflow the row, and paint over the textarea and Send. */
+.composer-model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--stage-muted);
+}
+
+.composer-model--error {
+  color: var(--danger, #c0392b);
+  font-size: var(--text-xs);
+}
+
+.composer-model .input--compact {
+  width: 7.5rem;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: var(--text-xs);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--stage-text);
+}
+
 .composer-row .textarea {
   min-height: 44px;
   max-height: 160px;
@@ -1009,6 +1047,19 @@ code, pre, kbd {
 
 .composer-error {
   margin-top: var(--space-2);
+}
+
+/* A failed turn: the transcript says what went wrong instead of showing an
+   empty answer. Sits inside the assistant block, so it needs its own spacing. */
+.turn-error {
+  margin-top: var(--space-2);
+  align-items: flex-start;
+  text-align: left;
+}
+
+.turn-error-code {
+  opacity: 0.75;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ---------------------------------------------------------------- rail */

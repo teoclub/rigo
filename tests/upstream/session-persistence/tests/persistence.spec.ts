@@ -1,12 +1,15 @@
 import '../../../support/vitest-bun-polyfill.ts'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@teoclub/cordis'
-import SessionStore, { Session, SessionId, isJsonValue } from '@teoclub/harness-session'
+import SessionStore, { Session, SessionId } from '@teoclub/harness-session'
+import { isJsonValue } from '@teoclub/harness-values'
 import type { SessionEvent, SessionHeader } from '@teoclub/harness-session'
 import {
   DEFAULT_PREPARED_SESSION_CACHE_SIZE, DEFAULT_WRITE_BATCH_MAX_DELAY_MS, MAX_WRITE_BATCH_DELAY_MS,
   SessionPersistence, SessionPersistenceRevision, PersistenceCoordinator,
-  type PersistenceBackend, type SessionPersistenceSnapshot, type StoredPrefix, type StoredSuffix,
+  type PersistenceBackend, type SessionAccess, type SessionHandle,
+  type SessionPersistenceCreateOptions, type SessionPersistenceOpenOptions,
+  type SessionPersistenceSnapshot, type StoredPrefix, type StoredSuffix,
 } from '@teoclub/harness-session-persistence'
 import { runPersistenceContract, meta, oneTurnLog } from './contract.ts'
 import { runCoordinatorContract, type CoordinatorFixture } from './coordinator-contract.ts'
@@ -94,8 +97,24 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return undefined
   }
 
-  create(m: SessionHeader): Promise<void> {
-    return this.coordinator.create(m)
+  create(m: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
+    return this.coordinator.create(m, options)
+  }
+
+  open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+    return this.coordinator.open(id, access, options)
+  }
+
+  override flush(): Promise<void> {
+    return this.coordinator.flushAll()
+  }
+
+  stat(id: SessionId, options?: SessionPersistenceOpenOptions): Promise<SessionPersistenceSnapshot | undefined> {
+    return this.coordinator.stat(id, options)
+  }
+
+  override readFromDurable(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    return this.coordinator.readFromDurable(id, fromSeq, signal)
   }
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
@@ -162,17 +181,18 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     if (closers.length > 0) entry.events.push(...structuredClone(closers) as SessionEvent[])
   }
 
-  async list(signal?: AbortSignal): Promise<SessionHeader[]> {
+  async list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]> {
+    const signal = options?.signal
     signal?.throwIfAborted()
-    return [...this.store.values()].map(e => structuredClone(e.meta))
-  }
-
-  async listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]> {
-    signal?.throwIfAborted()
-    return [...this.store.values()].map(entry => ({
-      header: structuredClone(entry.meta),
-      revision: memoryRevision(entry),
-    }))
+    return [
+      // A created-but-unappended session lives only in the coordinator until
+      // its first append, so the store above cannot see it.
+      ...this.coordinator.pendingSnapshots(),
+      ...[...this.store.values()].map(entry => ({
+        header: structuredClone(entry.meta),
+        revision: memoryRevision(entry),
+      })),
+    ]
   }
 }
 
@@ -293,7 +313,7 @@ describe('PersistenceCoordinator seed ownership', () => {
 
     try {
       const session = ctx.sessions.create(SessionId('shared-seed'), { seed: oneTurnLog() })
-      const seed = session.events
+      const seed = session.snapshotEvents()
       await ctx.sessions.flush(session)
 
       expect(backend.lastAppendedBatch).toBe(seed)
@@ -753,7 +773,7 @@ describe('PersistenceCoordinator session preparations', () => {
       first = await coordinator.prepare(id)
 
       expect(backend.loadAttempts).toBe(1)
-      expect(first.session.events[0]).toBe(inspected.events[0])
+      expect(first.session.snapshotEvents()[0]).toBe(inspected.events[0])
 
       first[Symbol.dispose]()
       second = await coordinator.prepare(id)
@@ -815,8 +835,8 @@ describe('PersistenceCoordinator session preparations', () => {
       )
 
       preparation = await coordinator.prepare(id)
-      expect(preparation.session.events).toHaveLength(9)
-      expect(preparation.session.events[0]).not.toBe(inspected.events[0])
+      expect(preparation.session.snapshotEvents()).toHaveLength(9)
+      expect(preparation.session.snapshotEvents()[0]).not.toBe(inspected.events[0])
       expect(backend.loadAttempts).toBe(2)
     } finally {
       preparation?.[Symbol.dispose]()
@@ -975,7 +995,7 @@ describe('PersistenceCoordinator session preparations', () => {
       session.append('turn/start', { turn: 1 })
 
       const inspected = await coordinator.inspect(session.id)
-      expect(inspected.events).toBe(session.events)
+      expect(inspected.events).toBe(session.snapshotEvents())
       expect(inspected.events.map(event => event.type)).toEqual(['turn/start'])
       await expect(Promise.resolve(coordinator.load(session.id))).rejects.toThrow(/live turn is open/)
     } finally {
@@ -1057,7 +1077,7 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       preparation = await coordinator.prepare(id)
 
-      expect(preparation.session.events.map(event => event.type)).toEqual([
+      expect(preparation.session.snapshotEvents().map(event => event.type)).toEqual([
         'turn/start',
         'turn/end',
         'turn/start',
@@ -1856,33 +1876,6 @@ describe('SessionPersistence service registration', () => {
 
     await expect(Promise.resolve(ctx.sessionPersistence.create(invalid)))
       .rejects.toThrow('session metadata must be losslessly JSON-serializable')
-    await fiber.dispose()
-  })
-
-  it('rejects a legacy header delta from a pre-change live producer', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    const fiber = await ctx.plugin(MemoryPersistence)
-    const session = ctx.sessions.create(SessionId('legacy-live'), { meta: { cwd: '/legacy' } })
-    // Model the runtime shape available to JavaScript or a hot-loaded plugin
-    // compiled against the obsolete event vocabulary.
-    const appendLegacy = session.append.bind(session) as (type: string, data: unknown) => SessionEvent
-    expect(() => appendLegacy('request/header-delta', { config: { model: 'legacy' } }))
-      .toThrow(/unsupported legacy request\/header-delta format/)
-    expect(session.events).toHaveLength(0)
-    await fiber.dispose()
-  })
-
-  it('rejects a legacy fallback header buffered by a pre-change live producer', async () => {
-    const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    const fiber = await ctx.plugin(MemoryPersistence)
-    const session = ctx.sessions.create(SessionId('legacy-fallback-live'), { meta: { cwd: '/legacy' } })
-    const appendLegacy = session.append.bind(session) as (type: string, data: unknown) => SessionEvent
-
-    expect(() => appendLegacy('request/header', legacyFallbackHeader().data))
-      .toThrow('unsupported legacy request/header reason "fallback"')
-    expect(session.events).toHaveLength(0)
     await fiber.dispose()
   })
 

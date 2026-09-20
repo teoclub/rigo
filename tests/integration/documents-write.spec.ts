@@ -94,6 +94,8 @@ describe.skipIf(typeof Bun !== 'undefined')('atomic document write (Node)', asyn
       version: SESSION_FORMAT_VERSION,
       id: SessionId(id),
       createdAt: Date.now(),
+      // Required since the 0.1.6 baseline.
+      isSeeded: false,
       ...(cwd === undefined ? {} : { cwd }),
     })
   }
@@ -127,7 +129,7 @@ describe.skipIf(typeof Bun !== 'undefined')('atomic document write (Node)', asyn
       expect(first.contentHash).toBe(mods().sha256('# Plan\n\nFirst version.\n'))
       expect(readFileSync(join(root, 'docs/plan.md'), 'utf8')).toBe('# Plan\n\nFirst version.\n')
       expect(ctx.documents.getVersion(mods().DocumentId('docs/plan.md'))).toBe(1)
-      const written = session.events.filter((event) => event.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE).at(-1)!
+      const written = session.snapshotEvents().filter((event) => event.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE).at(-1)!
       expect(written.data).toMatchObject({ documentId: 'docs/plan.md', version: 1 })
 
       // A second write with the correct expected version bumps to 2.
@@ -377,7 +379,7 @@ describe.skipIf(typeof Bun !== 'undefined')('atomic document write (Node)', asyn
       expect(second.replayed).toBe(true)
       expect(readFileSync(join(root, 'once.md'), 'utf8')).toBe('once')
       expect(ctx.documents.getVersion(mods().DocumentId('once.md'))).toBe(1)
-      expect(session.events.filter((event) => event.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE)).toHaveLength(1)
+      expect(session.snapshotEvents().filter((event) => event.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE)).toHaveLength(1)
     } finally {
       await ctx.fiber.dispose()
       sessionDriver.close()
@@ -429,7 +431,7 @@ describe.skipIf(typeof Bun !== 'undefined')('atomic document write (Node)', asyn
       expect(replayed.state).toBe('succeeded')
       expect(JSON.parse(replayed.result_json)).toMatchObject({ version: 1, relativePath: 'renamed.md' })
       expect(ctx.documents.getVersion(mods().DocumentId('renamed.md'))).toBe(1)
-      const event = session.events.filter((entry) => entry.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE).at(-1)!
+      const event = session.snapshotEvents().filter((entry) => entry.type === mods().DOCUMENT_WRITTEN_EVENT_TYPE).at(-1)!
       expect(event.data).toMatchObject({ documentId: 'renamed.md', version: 1 })
 
       // The rename did not provably happen: recovery-required, file untouched.

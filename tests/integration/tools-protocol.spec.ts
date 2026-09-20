@@ -153,11 +153,11 @@ describe('Rigo system-prompt/tools protocol (Issue 012)', () => {
           throw Object.assign(new Error('provider exploded'), { internal })
         },
       })
-      const agent = handle.ctx.agentLoop.create(SessionId('session_tools_protocol'), { provider: 'mock', model: 'mock' })
+      const agent = await handle.ctx.agentLoop.create(SessionId('session_tools_protocol'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'run tools' }], source: { kind: 'user' } }))
       await agent.whenIdle()
 
-      const results = agent.session.events.filter((event) => event.type === 'tool/result')
+      const results = agent.session.snapshotEvents().filter((event) => event.type === 'tool/result')
       expect(results).toHaveLength(2)
       const success = results[0]!
       expect(success.type === 'tool/result' && success.data.message.content[0]?.isError).toBe(false)

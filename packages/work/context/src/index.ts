@@ -30,6 +30,10 @@ import { Context } from '@teoclub/cordis'
 import { boundContextSummary } from '@teoclub/harness-llm'
 import { CONTEXT_ORDER, type ContextContribution, type ContextContributor } from '@teoclub/harness-context'
 import { KNOWN_SESSION_EVENT_TYPES, type Session } from '@teoclub/harness-session'
+// Type-only: loads the `inbox` entry of SessionProjectionStateMap, which the
+// agent package owns. No runtime dependency on the agent package.
+import type {} from '@teoclub/harness-agent'
+import type SessionProjectionRegistry from '@teoclub/harness-session-projection'
 import type { KnowledgeFilter, KnowledgeResult, KnowledgeService } from '@teoclub/shared-knowledge'
 
 /** The session event type appended for every completed retrieval. */
@@ -60,7 +64,10 @@ export interface KnowledgeRetrievedEvent {
 
 // Augment the ported session event map so `session.append(KNOWLEDGE_RETRIEVED_EVENT_TYPE, …)`
 // typechecks and the event travels through the ported log/persistence.
-declare module '@teoclub/harness-session' {
+// The 0.1.6 baseline moved SessionEventMap into the package's `types` subpath,
+// so the augmentation must name that module (a bare-specifier augmentation is
+// silently inert — it merges with nothing and every append fails to typecheck).
+declare module '@teoclub/harness-session/types' {
   interface SessionEventMap {
     'knowledge/retrieved': KnowledgeRetrievedEvent
   }
@@ -135,28 +142,60 @@ export function lastUserQuery(session: Session): string | undefined {
   return undefined
 }
 
-/** A pending (unclaimed) user-sourced message's visible text, or `undefined`. */
-export function lastPendingUserQuery(session: Session): string | undefined {
-  for (const event of [...session.events].reverse()) {
-    // `agent/inbox/spliced` is an agent-package event; read it structurally
-    // so this package does not need the harness-agent type augmentation.
-    const candidate = event as unknown as {
-      type?: string
-      data?: { inserted?: readonly { role?: string; source?: { kind?: string }; content?: readonly { type?: string; text?: string }[] }[] }
-    }
-    if (candidate.type !== 'agent/inbox/spliced' || candidate.data === undefined) continue
-    const inserted = candidate.data.inserted
-    if (inserted === undefined || inserted.length === 0) continue
-    for (const message of [...inserted].reverse()) {
-      if (message.role !== 'user' || message.source?.kind !== 'user') continue
-      const text = (message.content ?? [])
-        .filter((block) => block.type === 'text')
-        .map((block) => (block as { text: string }).text)
-        .join('')
-      if (text.trim().length > 0) return text
-    }
+/**
+ * Resolve the session projection registry, which the pending-input path needs
+ * as mandatory state.
+ *
+ * Per the mandatory projection seam a consumer either declares the registry as
+ * a required injection or resolves it explicitly and throws on the first
+ * dependent access — it never degrades to a default. Cordis resolves services
+ * lazily by name, so the miss is checked here rather than left to surface as a
+ * property access on `undefined`.
+ *
+ * @param ctx - the assembling context.
+ * @returns the projection registry.
+ * @throws when no composition mounted `@teoclub/harness-session-projection`.
+ */
+function requireProjectionRegistry(ctx: Context): SessionProjectionRegistry {
+  const projections = ctx.get('sessionProjections')
+  if (projections === undefined) {
+    throw new Error(
+      'work.knowledge: ctx.sessionProjections is not mounted — compose @teoclub/harness-session-projection (carrying the "inbox" unit from @teoclub/harness-agent-loop) before the knowledge contributor',
+    )
   }
-  return undefined
+  return projections
+}
+
+/**
+ * The visible text of the most recent pending user-sourced message, or
+ * `undefined`.
+ *
+ * Reads the agent inbox PROJECTION rather than scanning the event log. The old
+ * scan answered from splice history, so a message that had been spliced in and
+ * later claimed or removed still answered this question; the projection is the
+ * durable current pending set, which is what "pending" actually means.
+ * `next-turn` is preferred over `next-step` because a queued turn is the user's
+ * next request while `next-step` is mid-turn input (see `ReactLoopInbox.claim`,
+ * which drains every `next-step` entry per step and one `next-turn` entry per
+ * turn boundary).
+ *
+ * @param projections - the session projection registry (mandatory state).
+ * @param session - the session whose pending input is read.
+ * @returns the text, or `undefined` when nothing user-sourced is pending.
+ * @throws when the inbox projection is not registered: a missing key fails at
+ *   first dependent access instead of degrading to a default.
+ */
+export function lastClaimedUserQuery(
+  projections: SessionProjectionRegistry,
+  session: Session,
+): string | undefined {
+  const claimed = projections.stateOf(session, 'lastUserInput')
+  if (claimed === undefined) {
+    throw new Error(
+      'work.knowledge: the "lastUserInput" session projection is not registered — the work bundle registers it beside this contributor',
+    )
+  }
+  return claimed.text === '' ? undefined : claimed.text
 }
 
 /** Parse an FTS-style locator JSON (`{"ordinal":N,"start":S,"end":E}`), best-effort. */
@@ -228,7 +267,8 @@ export class WorkKnowledgeContributor implements ContextContributor {
       return this.record({ status: 'skipped', query: '', topK: topK ?? 8, sources: [] })
     }
     const rawQuery = (this.queryProvider
-      ?? (() => lastUserQuery(this.session) ?? lastPendingUserQuery(this.session)))(ctx)
+      ?? (() => lastClaimedUserQuery(requireProjectionRegistry(ctx), this.session)
+        ?? lastUserQuery(this.session)))(ctx)
     const query = rawQuery?.trim() ?? ''
     if (query.length === 0) {
       return this.record({ status: 'skipped', query: '', topK: topK ?? 8, sources: [] })
@@ -302,5 +342,8 @@ export class WorkKnowledgeContributor implements ContextContributor {
     return { source: CONTRIBUTION_SOURCE, content: text }
   }
 }
+
+export { lastUserInputProjection } from './last-user-input.ts'
+export type { LastUserInputState } from './last-user-input.ts'
 
 export default WorkKnowledgeContributor

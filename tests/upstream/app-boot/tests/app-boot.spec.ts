@@ -793,7 +793,7 @@ describe('addHarnessSourceSection', () => {
   it('distinguishes the source path from the current workdir between identity and persona', async () => {
     const ctx = new Context()
     try {
-      await ctx.plugin(SystemPrompt, { persona: 'You are a coding agent.' })
+      await ctx.plugin(SystemPrompt, { personaPrefix: 'You are a coding agent.' })
       const dispose = addHarnessSourceSection(ctx, SOURCE_ROOT)
       expect(dispose).toBeTypeOf('function')
       const systemPrompt = ctx.get('systemPrompt')!

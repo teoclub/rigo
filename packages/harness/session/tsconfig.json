@@ -24,6 +24,9 @@
       "path": "../scope"
     },
     {
+      "path": "../values"
+    },
+    {
       "path": "../../../vendor/cordis/packages/cordis"
     }
   ]

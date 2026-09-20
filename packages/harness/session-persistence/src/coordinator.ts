@@ -2,7 +2,7 @@
  * Shared buffering, serialization, adoption, repair, and disposal orchestration
  * for first-party backends. Third-party backends may implement the public
  * persistence seam directly.
- * @module @deepseek-ai/dsh-session-persistence/coordinator
+ * @module @teoclub/harness-session-persistence/coordinator
  */
 
 import { Context } from '@teoclub/cordis'
@@ -12,13 +12,34 @@ import {
   KNOWN_SESSION_EVENT_TYPES,
   SESSION_FORMAT_VERSION,
   SessionPreparation,
-  snapshotJsonValue,
   snapshotSessionEvent,
 } from '@teoclub/harness-session'
+import { snapshotJsonValue } from '@teoclub/harness-values'
+import { SessionLogOffset } from '@teoclub/harness-session'
 import type { Session, SessionEvent, SessionId, SessionHeader } from '@teoclub/harness-session'
 import { MAX_TIMER_DELAY_MS } from '@teoclub/harness-timeout'
-import type { SessionInspection, SessionLocation } from './index.ts'
-import type { SessionPersistenceRevision } from './revision.ts'
+import type {
+  SessionAccess,
+  SessionHandle,
+  SessionHandleAppendOptions,
+  SessionHandleFlushOptions,
+  SessionHandleReadOptions,
+  SessionHandleReadResult,
+} from './handle.ts'
+import {
+  SessionAlreadyExistsError,
+  SessionAlreadyOwnedError,
+  SessionHandleClosedError,
+  SessionPersistenceNotFoundError,
+  SessionReadOnlyError,
+} from './errors.ts'
+import type { SessionInspection, SessionLocation, SessionPersistenceCreateOptions, SessionPersistenceOpenOptions, SessionPersistenceSnapshot } from './index.ts'
+import { SessionPersistenceRevision } from './revision.ts'
+import {
+  SessionFormatUnsupportedError,
+  SessionPersistenceCorruptionError,
+  sessionFormatVersionRefusal,
+} from './errors.ts'
 import { observeQueuedAbort, SessionPreparations } from './preparations.ts'
 import type { SessionPreparationReservation } from './preparations.ts'
 import { SessionWriteBehind } from './write-behind.ts'
@@ -31,54 +52,6 @@ export const DEFAULT_WRITE_BATCH_MAX_DELAY_MS = 200
 
 /** Largest write batching delay accepted by Node's timer implementation. */
 export const MAX_WRITE_BATCH_DELAY_MS = MAX_TIMER_DELAY_MS
-
-/** Durable session contents failed validation after a successful backend read. */
-export class SessionPersistenceCorruptionError extends Error {
-  /**
-   * @param message - stable corruption context.
-   * @param options - original validation failure.
-   */
-  constructor(message: string, options: ErrorOptions) {
-    super(message, options)
-    this.name = 'SessionPersistenceCorruptionError'
-  }
-}
-
-/**
- * The stored log is intact but this runtime cannot faithfully interpret it:
- * the header carries an unsupported format version, or an event's type is
- * unknown to this build and the event is not marked ignorable. Distinct from
- * {@link SessionPersistenceCorruptionError} — nothing is damaged; the raw log
- * remains readable at {@link location} when the backend keeps one artifact
- * per session.
- */
-export class SessionFormatUnsupportedError extends Error {
-  /**
-   * @param message - stable reason the log cannot be interpreted, already
-   *   including the raw-log path when one exists.
-   * @param location - the backend's artifact location, when one exists.
-   */
-  constructor(message: string, readonly location?: SessionLocation) {
-    super(message)
-    this.name = 'SessionFormatUnsupportedError'
-  }
-}
-
-/**
- * Direction-aware refusal text for a stored session whose format version this
- * build does not read. Shared by the coordinator's load-time check and by
- * backends that must refuse BEFORE decoding version-dependent structure (a
- * future format may not satisfy today's structural checks at all, and the
- * user must see "upgrade the harness", never "corrupt").
- * @param id - the stored session id, for message context.
- * @param version - the stored format version.
- * @returns the stable refusal text, without a raw-log path suffix.
- */
-export function sessionFormatVersionRefusal(id: string, version: number): string {
-  return version > SESSION_FORMAT_VERSION
-    ? `session "${id}" uses log format v${version}, but this harness reads only v${SESSION_FORMAT_VERSION}: the log was written by a newer harness — upgrade the harness to open it`
-    : `session "${id}" uses log format v${version}, older than the supported v${SESSION_FORMAT_VERSION}, and this build ships no upgrade path for it`
-}
 
 /** Coordinator policy supplied by a concrete persistence backend. */
 export interface PersistenceCoordinatorOptions {
@@ -193,10 +166,12 @@ export interface PersistenceBackend<TornMarker = unknown> {
   commitRepair(meta: SessionHeader, tornMarker: TornMarker | undefined, closers: readonly SessionEvent[]): Promise<void>
 
   /**
-   * List all stored (materialized) sessions' metadata.
-   * @param signal - optional cancellation for backend listing work.
+   * There is deliberately no backend `list` hook here. Listing is served by
+   * {@link SessionPersistence.list} on the provider itself, because only the
+   * provider knows its storage's cheap change token — a hook taking a bare
+   * signal could not express the `SessionPersistenceListOptions` the service
+   * promises, and the two signatures cannot coexist on one class.
    */
-  list(signal?: AbortSignal): Promise<SessionHeader[]>
 
   /**
    * Optional side-effect-free artifact locator, used to point refusal
@@ -214,11 +189,39 @@ export interface PersistenceBackend<TornMarker = unknown> {
   close?(): Promise<void>
 }
 
+/**
+ * The fork-inherited prefix length one stored log records, or `0` when the log
+ * carries no inherited end-seed marker. The count is not header metadata: the
+ * session constructor appends a `session/end-seed` event with
+ * `data.inherited === true` at the cut, and that event's seq IS the length
+ * (`packages/session/session-format-v1-to-v2` decodes it the same way).
+ */
+function inheritedEventCountOf(events: readonly SessionEvent[]): number {
+  for (const event of events) {
+    if (event.type !== 'session/end-seed') continue
+    if ((event.data as { inherited?: unknown } | undefined)?.inherited === true) return event.seq
+  }
+  return 0
+}
+
 /** Per-session write state held by the coordinator's in-memory bookkeeping. */
 interface SessionState {
   meta: SessionHeader
   /** The next seq the backend expects to append (the stored log length). */
   cursor: number
+  /**
+   * Fork-inherited prefix length of the stored log, so `open` can hand back a
+   * resume the same boundary the log records without re-reading it.
+   */
+  inheritedEventCount: number
+  /**
+   * Whether every event in the stored log was checked against this build's
+   * known vocabulary. Appends are deliberately permissive (a newer producer's
+   * event type is stored verbatim), so an append of an unknown type clears
+   * this, and the next write open re-reads and refuses instead of letting a
+   * caller extend a log this build cannot reconstruct.
+   */
+  vocabularyValidated: boolean
   /**
    * Whether lazy creation has produced a durable artifact. The first append
    * atomically materializes the header with events; reclaim logic uses this to
@@ -238,6 +241,103 @@ interface SessionState {
 interface LiveSessionState {
   init: Promise<void>
   writes: SessionWriteBehind
+}
+
+/**
+ * One open channel onto a stored session, returned by the coordinator's
+ * `create`/`open`.
+ *
+ * A handle is single-owner state rather than a shared service: `read` never
+ * backtracks below what this handle already observed, a `write` handle reads
+ * its own successful appends, and `close()` is the one teardown. Reads route
+ * through the coordinator's durable path, so a write handle always sees its
+ * own buffered appends rather than the stored prefix behind them.
+ */
+class CoordinatorSessionHandle implements SessionHandle {
+  private closed = false
+
+  constructor(
+    private readonly coordinator: PersistenceCoordinator<never>,
+    readonly id: SessionId,
+    readonly header: SessionHeader,
+    readonly inheritedEventCount: SessionLogOffset,
+    readonly access: SessionAccess,
+    private readonly release: (id: SessionId) => void,
+  ) {}
+
+  /**
+   * Read a legal prefix segment of the logical log.
+   * @param offset - first logical event seq to include; defaults to `0`.
+   * @param length - maximum number of events; defaults to the rest of the log.
+   * @param options - optional cancellation.
+   * @returns the caller-owned slice plus its values' ownership state.
+   */
+  async read(offset = 0, length?: number, options?: SessionHandleReadOptions): Promise<SessionHandleReadResult> {
+    this.assertOpen('read')
+    // Both bounds are validated here, not just the offset: `length` only ever
+    // reaches a slice below, so an out-of-range length would otherwise be
+    // silently clamped by Array.prototype.slice instead of refused.
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new TypeError(`session "${this.id}" read offset must be a non-negative safe integer, got ${String(offset)}`)
+    }
+    if (length !== undefined && (!Number.isSafeInteger(length) || length < 0)) {
+      throw new TypeError(`session "${this.id}" read length must be a non-negative safe integer, got ${String(length)}`)
+    }
+    // A created-but-unappended session has no stored artifact yet, but its
+    // logical log exists and is empty — that is what a handle over it reads.
+    // Only the service-level `readFrom` reports the physical absence.
+    if (this.coordinator.isPendingCreate(this.id)) {
+      return { eventState: 'detached', events: [] }
+    }
+    const { events } = await this.coordinator.readFromDurable(this.id, offset, options?.signal)
+    return {
+      eventState: 'detached',
+      events: length === undefined ? events : events.slice(0, length),
+    }
+  }
+
+  /**
+   * Append a contiguous batch continuing the current logical end.
+   * @param events - the contiguous batch, in seq order.
+   * @param options - optional cancellation observed before the write starts.
+   */
+  async append(events: readonly SessionEvent[], options?: SessionHandleAppendOptions): Promise<void> {
+    this.assertOpen('append')
+    if (this.access === 'read') throw new SessionReadOnlyError(this.id, 'append')
+    options?.signal?.throwIfAborted()
+    await this.coordinator.append(this.id, events)
+  }
+
+  /**
+   * Durability barrier: drains this session's buffered writes to quiescence.
+   * @param options - optional cancellation observed before the barrier starts.
+   */
+  async flush(options?: SessionHandleFlushOptions): Promise<void> {
+    this.assertOpen('flush')
+    if (this.access === 'read') throw new SessionReadOnlyError(this.id, 'flush')
+    options?.signal?.throwIfAborted()
+    await this.coordinator.flushById(this.id)
+  }
+
+  /**
+   * Release the handle: a write handle completes pending durability first,
+   * then releases write ownership. Idempotent; deliberately not cancellable.
+   */
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    if (this.access === 'write') await this.coordinator.flushById(this.id)
+    this.release(this.id)
+  }
+
+  /** {@link close}, for `await using`. */
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.close()
+  }
+
+  private assertOpen(operation: string): void {
+    if (this.closed) throw new SessionHandleClosedError(this.id, operation)
+  }
 }
 
 /** One validated cold source and the exact unpublished Session built from it. */
@@ -351,7 +451,10 @@ function migrateLegacySteeringEvent(event: SessionEvent, id: SessionId): Session
   const wrapped = asRecord(data['message'])
   if (wrapped !== undefined && Number.isSafeInteger(data['turn'])
     && hasOnlyKeys(data, ['turn', 'message'])) {
-    return { ...event, type: 'user/message', data: wrapped } as SessionEvent
+    // The legacy event is retyped into the current discriminated union; the
+    // overlap check cannot see through the erased legacy shape, so the
+    // conversion goes through `unknown` deliberately.
+    return { ...event, type: 'user/message', data: wrapped } as unknown as SessionEvent
   }
   if (!Number.isSafeInteger(data['turn']) || !hasOnlyKeys(data, ['turn', 'content', 'source'])) {
     throw new Error(`session "${id}" contains malformed pre-react-loop steering/message at seq ${event.seq}`)
@@ -593,6 +696,9 @@ export class PersistenceCoordinator<TornMarker = unknown> {
   /** Exact disposed lifecycles whose buffered tail is still draining. */
   private retirements = new Map<SessionId, Promise<void>>()
   /** Shared cold reads, unpublished reservations, and completed LRU entries. */
+  /** Single-writer ownership claims: `write` while a write handle is open. */
+  private readonly ownership = new Map<SessionId, SessionAccess>()
+
   private readonly preparations: SessionPreparations<PreparedSessionSource<TornMarker>, SessionState>
   /**
    * Per-session serialization: every operation chains onto the prior one for the
@@ -630,7 +736,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
    * Register detached session metadata for lazy creation on the first append.
    * @param meta - header to snapshot; duplicate tracked or persisted ids reject.
    */
-  create(meta: SessionHeader): Promise<void> {
+  create(meta: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
     // Snapshot before queueing so caller mutation cannot diverge the key and header.
     const snapshot = snapshotJsonValue(meta)
     if (snapshot === undefined) {
@@ -639,22 +745,189 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     if (!Number.isSafeInteger(snapshot.createdAt) || snapshot.createdAt < 0) {
       return Promise.reject(new TypeError('session metadata createdAt must be a non-negative safe integer'))
     }
-    return this.serialize(snapshot.id, () => this.createCore(snapshot))
+    // `create` takes write ownership: the caller owns the new log until it
+    // closes the handle, and a concurrent `open(id, 'write')` must reject.
+    this.ownership.set(snapshot.id, 'write')
+    return this.serialize(snapshot.id, () => this.createCore(snapshot, options?.inheritedEventCount ?? 0)).then(() => this.handleFor(
+      snapshot,
+      options?.inheritedEventCount ?? SessionLogOffset(0),
+      'write',
+    )).catch((error: unknown) => {
+      // The claim above is only real once a handle exists to release it. A
+      // rejected create (a duplicate id) must hand the claim back, or the id
+      // stays write-owned by a handle nobody holds and every later open and
+      // create on it refuses.
+      this.ownership.delete(snapshot.id)
+      throw error
+    })
   }
 
-  private async createCore(meta: SessionHeader): Promise<void> {
-    // Do NOT clobber an existing session: the SessionId IS the identity.
+  /**
+   * Open an existing stored session.
+   * @param id - the stored session to open.
+   * @param access - `read` or `write`; `write` claims single-writer ownership.
+   * @param options - optional cancellation.
+   * @returns the open handle.
+   * @throws {SessionPersistenceNotFoundError} when the session does not exist.
+   * @throws {SessionAlreadyOwnedError} for `write` when ownership is taken.
+   */
+  async open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+    options?.signal?.throwIfAborted()
+    const tracked = this.states.get(id)
+    // A write open claims the log it is about to extend, so it must be able to
+    // interpret it: load the stored prefix unless a tracked state already
+    // proves the vocabulary, and refuse an unknown required event type HERE
+    // rather than after the caller has begun appending. A read open stays
+    // permissive and refuses at the first read instead.
+    const mustValidate = access === 'write' && (tracked === undefined || !tracked.vocabularyValidated)
+    const stored = tracked === undefined || mustValidate
+      ? await this.backend.loadStored(id, options?.signal)
+      : undefined
+    const header = tracked?.meta ?? stored?.meta
+    if (header === undefined) throw new SessionPersistenceNotFoundError(id)
+    if (access === 'write') {
+      if (this.ownership.get(id) === 'write') throw new SessionAlreadyOwnedError(id)
+      this.ownership.set(id, 'write')
+      if (mustValidate && stored !== undefined) {
+        try {
+          this.assertEventsSupported(stored.meta, adoptStoredEvents(stored.events, id))
+        } catch (error: unknown) {
+          // The claim only stands behind a handle the caller receives; a
+          // refused open must hand it back, or every retry reports ownership
+          // conflict instead of the real refusal.
+          this.ownership.delete(id)
+          throw error
+        }
+      }
+    }
+    // A resume must restore the boundary the LOG records, not the length of the
+    // stored log: the whole log is the resume seed, so deriving the cut from it
+    // would mark every inherited event as child-owned.
+    const inheritedEventCount = tracked?.inheritedEventCount
+      ?? inheritedEventCountOf(adoptStoredEvents(stored?.events ?? [], id))
+    return this.handleFor(header, SessionLogOffset(inheritedEventCount), access)
+  }
+
+  /**
+   * Observe one stored session without reading its event log or taking
+   * ownership.
+   * @param id - the stored session to observe.
+   * @param options - optional cancellation.
+   * @returns the header plus its opaque change token, or `undefined` when absent.
+   */
+  async stat(id: SessionId, options?: SessionPersistenceOpenOptions): Promise<SessionPersistenceSnapshot | undefined> {
+    const tracked = this.states.get(id)
+    const header = tracked?.meta ?? (await this.backend.loadStored(id, options?.signal))?.meta
+    if (header === undefined) return undefined
+    const revision = await this.backend.readStoredRevision(id, options?.signal)
+    return { header, revision: revision ?? SessionPersistenceRevision('0') }
+  }
+
+  /**
+   * Whether this instance holds a created-but-never-appended session: an
+   * identity with no backend artifact yet. Its LOGICAL log is empty rather
+   * than missing, which is what a handle over it reads; the service-level
+   * `readFrom` keeps the physical contract and reports absence.
+   * @param id - the session to classify.
+   * @returns true when the id is tracked and has produced no durable artifact.
+   */
+  isPendingCreate(id: SessionId): boolean {
+    const tracked = this.states.get(id)
+    return tracked !== undefined && !tracked.materialized
+  }
+
+  /**
+   * Snapshots of the sessions this instance tracks but has not materialized —
+   * a created-but-never-appended log has no backend artifact, so the backend's
+   * own listing cannot see it, while `stat` and `read` on this instance must.
+   * A provider's `list` merges these ahead of its backend rows; the revision is
+   * the same empty-source token `stat` reports for them.
+   * @returns one snapshot per tracked, unmaterialized session.
+   */
+  pendingSnapshots(): SessionPersistenceSnapshot[] {
+    const pending: SessionPersistenceSnapshot[] = []
+    for (const state of this.states.values()) {
+      if (state.materialized) continue
+      pending.push({
+        header: structuredClone(state.meta),
+        revision: SessionPersistenceRevision('0'),
+      })
+    }
+    return pending
+  }
+
+  /**
+   * Flush every active write handle in one durability barrier: each live
+   * session's routed events drain durably.
+   * @returns resolution once every live session active at the call has flushed.
+   */
+  async flushAll(): Promise<void> {
+    const errors = await settledErrors([...this.live.keys()].map((session) => this.flush(session)))
+    if (errors.length > 0) throw new AggregateError(errors, `${this.backend.name} flush failed`)
+  }
+
+  /**
+   * Drain one session's buffered writes to quiescence by id.
+   *
+   * The handle API is id-addressed while the write path is Session-addressed,
+   * so this bridges the two: a session with no live controller has nothing
+   * buffered and is already durable.
+   * @param id - the session whose pending batch is drained.
+   */
+  async flushById(id: SessionId): Promise<void> {
+    const live = [...this.live.keys()].find((session) => session.header.id === id)
+    if (live !== undefined) await this.flush(live)
+  }
+
+  /** Build one handle over an already-validated header. */
+  private handleFor(header: SessionHeader, inheritedEventCount: SessionLogOffset, access: SessionAccess): SessionHandle {
+    return new CoordinatorSessionHandle(
+      this as unknown as PersistenceCoordinator<never>,
+      header.id,
+      header,
+      inheritedEventCount,
+      access,
+      (released) => { this.release(released, access) },
+    )
+  }
+
+  /**
+   * Release one closed handle's write ownership.
+   *
+   * A created-but-never-appended session leaves no artifact behind: dropping
+   * its intent here is what makes an abandoned create invisible to `stat`,
+   * `list` and `open` — the lazy-materialization contract. A session with a
+   * durable prefix stays, because it is already observable.
+   * @param id - the released session.
+   * @param access - the released handle's access mode.
+   */
+  private release(id: SessionId, access: SessionAccess): void {
+    this.ownership.delete(id)
+    if (access !== 'write') return
+    const tracked = this.states.get(id)
+    if (tracked === undefined || tracked.materialized) return
+    // `tracked.owner` is optional: a session that never adopted a live owner
+    // has no pending work by construction, so only an owner with work keeps it.
+    const owner = tracked.owner === undefined ? undefined : this.live.get(tracked.owner)
+    if (owner !== undefined && owner.writes.hasWork) return
+    this.states.delete(id)
+  }
+
+  private async createCore(meta: SessionHeader, inheritedEventCount = 0): Promise<void> {
+    // Do NOT clobber an existing session: the SessionId IS the identity. Every
+    // occupied-id path reports the same error class, so a caller can tell "this
+    // id is taken" from a storage failure without matching message text.
     if (this.states.has(meta.id) || this.preparations.has(meta.id)) {
-      throw new Error(`session "${meta.id}" already exists in this backend`)
+      throw new SessionAlreadyExistsError(meta.id)
     }
     // A persisted artifact under this id (in ANY scope) blocks creation: load/
     // resume identify a session by id alone, so a second artifact would make
     // resume nondeterministic.
     if (await this.backend.loadStored(meta.id) !== undefined) {
-      throw new Error(`session "${meta.id}" already has a persisted log on disk; load/resume it instead of creating`)
+      throw new SessionAlreadyExistsError(meta.id)
     }
     // Pure lazy: record intent only. No artifact until the first append.
-    this.states.set(meta.id, { meta, cursor: 0, materialized: false })
+    this.states.set(meta.id, { meta, cursor: 0, materialized: false, inheritedEventCount, vocabularyValidated: true })
   }
 
   // `async` so synchronous materialization failures below reject (not throw) per
@@ -701,6 +974,9 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       }
     }
 
+    if (events.some(event => !KNOWN_SESSION_EVENT_TYPES.has(event.type) && event.ignorable !== true)) {
+      state.vocabularyValidated = false
+    }
     await this.backend.appendBatch(state.meta, events, state.materialized)
     // The durable write is the transaction: mark materialized + advance the
     // cursor as soon as it commits (uniform across backends).
@@ -739,7 +1015,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
           this.preparations.release(
             reservation,
             reservation.state.owner === undefined
-              && reservation.source.session.events.length === reservation.source.sessionLength,
+              && reservation.source.session.seq === reservation.source.sessionLength,
           )
         },
       })
@@ -838,6 +1114,20 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     return waited.then(() => this.serialize(id, () => this.readFromCore(id, fromSeq, signal), signal))
   }
 
+  /**
+   * Drain this session's batched writes, then read the stored suffix.
+   *
+   * `readFrom` alone is served from the stored prefix, which trails the live
+   * log by whatever the write-behind controller is still holding. A consumer
+   * replaying forward from a watermark must see the whole suffix, so the
+   * pending batch is flushed through its quiescence barrier first.
+   */
+  async readFromDurable(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    const live = [...this.live.keys()].find((session) => session.header.id === id)
+    if (live !== undefined) await this.flush(live)
+    return this.readFrom(id, fromSeq, signal)
+  }
+
   private async readFromCore(
     id: SessionId,
     fromSeq: number,
@@ -905,7 +1195,12 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       const session = this.ctx.sessions.prepare(id, {
         seed: balanced,
         meta,
-        seedSource: 'persistence',
+      // Storage-restore variant (the 0.1.6 replacement for `seedSource`).
+      // Rigo's persistence does not store a fork-inherited prefix and no Rigo
+      // composition creates a seeded session, so the inherited prefix is 0;
+      // the events are independently owned copies, hence `detached`.
+        inheritedEventCount: SessionLogOffset(0),
+        eventState: 'detached',
       })
       const inspection: SessionInspection = Object.freeze({
         meta: session.header,
@@ -915,7 +1210,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
         inspection,
         session,
         revision,
-        sessionLength: session.events.length,
+        sessionLength: session.seq,
         tornMarker,
         closers,
       }
@@ -930,30 +1225,55 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     }
   }
 
-  /** Commit one prepared repair and establish its ownerless durable cursor. */
+  /**
+   * Commit one prepared repair and establish its ownerless durable cursor.
+   *
+   * `repairClosers: false` is the ADOPTION variant. The semantic crash repair —
+   * synthesizing the missing tool results, `step/end` and `turn/end` an
+   * interrupted turn never wrote — belongs to the agent layer, which computes
+   * them from the physical log and appends them through the same handle as an
+   * ordinary batch. A caller that is about to append its own events therefore
+   * adopts the PHYSICAL log: only a torn (never-committed) tail is truncated,
+   * which is a storage-level concern the backend cannot defer, and the cursor
+   * lands on the physical length so the caller's first seq continues it.
+   * Committing the closers here instead would persist them, advance the cursor
+   * past them, and make the caller's own closers a seq mismatch.
+   */
   private async commitPrepared(
     source: PreparedSessionSource<TornMarker>,
+    options: { repairClosers?: boolean } = {},
   ): Promise<{ source: PreparedSessionSource<TornMarker>; state: SessionState } | undefined> {
     const id = source.inspection.meta.id
-    const cursor = source.inspection.events.length
+    const repairClosers = options.repairClosers !== false
+    const cursor = repairClosers
+      ? source.inspection.events.length
+      : source.inspection.events.length - source.closers.length
     const existing = this.states.get(id)
     if (existing?.owner !== undefined) {
       throw new Error(`session "${id}" already has a live persistence owner`)
     }
     if (!await this.isPreparedSourceCurrent(source)) return undefined
-    if (source.tornMarker !== undefined || source.closers.length > 0) {
-      await this.backend.commitRepair(source.inspection.meta, source.tornMarker, source.closers)
+    if (source.tornMarker !== undefined || (repairClosers && source.closers.length > 0)) {
+      await this.backend.commitRepair(
+        source.inspection.meta,
+        source.tornMarker,
+        repairClosers ? source.closers : [],
+      )
       // The repair changed the durable revision. Reload the exact committed
       // graph instead of associating the old in-memory view with a newer revision.
       return undefined
     }
-    const state = existing ?? {
+    const inheritedEventCount = inheritedEventCountOf(source.inspection.events)
+    const state: SessionState = existing ?? {
       meta: source.inspection.meta,
       cursor,
+      inheritedEventCount,
+      vocabularyValidated: true,
       materialized: true,
     }
     state.meta = source.inspection.meta
     state.cursor = cursor
+    state.inheritedEventCount = inheritedEventCount
     state.materialized = true
     this.states.set(id, state)
     return {
@@ -972,7 +1292,10 @@ export class PersistenceCoordinator<TornMarker = unknown> {
 
   /** Return one durable immutable view of an already-live Session. */
   private async loadLiveSnapshot(session: Session): Promise<SessionInspection> {
-    const events = session.events
+    // This module IS the persistence layer: reading the live log here is the
+    // explicit storage read the session-read decision calls for, not a consumer
+    // reaching for convenience history.
+    const events = session.snapshotEvents()
     await this.flush(session)
     const state = this.states.get(session.id)
     /* v8 ignore next -- successful flush always publishes this live session's durable state */
@@ -986,7 +1309,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
 
   /** Borrow one immutable view from an already-live Session. */
   private inspectLive(session: Session): SessionInspection {
-    return Object.freeze({ meta: session.header, events: session.events })
+    return Object.freeze({ meta: session.header, events: session.snapshotEvents() })
   }
 
   /** Await one retiring lifecycle with caller cancellation. */
@@ -1035,10 +1358,12 @@ export class PersistenceCoordinator<TornMarker = unknown> {
   /** Build a state for a session discovered in storage but not yet in memory. */
   private async adopt(id: SessionId): Promise<SessionState> {
     // This runs inside the id's serialization chain, so it uses core helpers
-    // instead of re-entering through public prepare/load methods.
+    // instead of re-entering through public prepare/load methods. It adopts the
+    // physical log (see `commitPrepared`): the caller is appending its own
+    // events, so the semantic repair of an interrupted turn is the caller's.
     for (;;) {
       const source = this.preparations.takeReady(id) ?? await this.prepareCore(id)
-      const committed = await this.commitPrepared(source)
+      const committed = await this.commitPrepared(source, { repairClosers: false })
       if (committed !== undefined) return committed.state
     }
   }
@@ -1171,7 +1496,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       return restored
     }
     // Session owns this stable deep-frozen snapshot; backends only serialize it.
-    const seed = session.events
+    const seed = session.snapshotEvents()
     const live: LiveSessionState = {
       init: Promise.resolve(),
       writes: this.createWriteBehind(session, () => live.init),
@@ -1193,7 +1518,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       || session.firstLiveSeq !== state.cursor) {
       throw new Error(`session "${session.id}" preparation no longer matches its persistence state`)
     }
-    const suffix = session.events.slice(state.cursor).map(event => structuredClone(event))
+    const suffix = session.snapshotEvents().slice(state.cursor).map(event => structuredClone(event))
     this.preparations.attach(reservation)
     state.owner = session
     const live: LiveSessionState = {
@@ -1316,6 +1641,8 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     this.states.set(session.header.id, {
       meta: { ...meta },
       cursor: storedEvents.length,
+      inheritedEventCount: inheritedEventCountOf(storedEvents),
+      vocabularyValidated: true,
       materialized: true,
       owner: session,
     })

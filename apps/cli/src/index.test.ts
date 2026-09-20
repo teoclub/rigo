@@ -46,11 +46,14 @@ async function withEnv<T>(vars: Record<string, string | undefined>, body: () => 
 }
 
 describe('run plan', () => {
-  it('boots the deterministic mock by default, registering no adapter', () => {
+  it('boots the deterministic mock by default, registering its adapter', () => {
     const plan = planCli({}, '/work')
     expect(plan.provider).toBe('mock')
     expect(plan.model).toBe('mock')
-    expect(plan.adapters).toEqual({})
+    // The bundle ships no adapter of its own, so the route must be REGISTERED:
+    // an empty map boots a server that reports `model mock` and then fails
+    // every turn with NO_ADAPTER.
+    expect(Object.keys(plan.adapters)).toEqual(['mock'])
     expect(plan.route).toContain('mock')
     // A relative RIGO_HOME would silently land wherever the process happened
     // to start; the plan always resolves it.

@@ -9,7 +9,7 @@
  * with `removedCount` and marks a cancellation `outcome: 'canceled'`, which
  * separates a turn claiming its input from work being dropped unrun.
  *
- * @module @deepseek-ai/dsh-agent/consumed-work
+ * @module @teoclub/harness-agent/consumed-work
  */
 
 import type { SessionEvent, TurnEndReason } from '@teoclub/harness-session'

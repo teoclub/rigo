@@ -9,9 +9,9 @@
 | Field | Value |
 | --- | --- |
 | Upstream repository | <https://github.com/deepseek-ai/deepseek-harness.git> |
-| Official release tag | `dsh-v0.1.1-rc.2` |
-| Full commit SHA | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` |
-| Upstream version | `0.1.1-rc.2` |
+| Official release tag | `dsh-v0.1.6-alpha.1` |
+| Full commit SHA | `0a15e36e7f82b6ed45af6fa9759f29b40dcd965d` |
+| Upstream version | `0.1.6-alpha.1` |
 | License | MIT (Copyright © DeepSeek) |
 
 ### Vendored Cordis is pinned separately
@@ -24,7 +24,7 @@ is an independent monorepo with its own pin, recorded in each vendored
 
 | Surface | Revision |
 | --- | --- |
-| Harness mirror (this document) | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh-v0.1.1-rc.2`) |
+| Harness mirror (this document) | `0a15e36e7f82b6ed45af6fa9759f29b40dcd965d` (`dsh-v0.1.6-alpha.1`) |
 | `vendor/cordis` | `ddefc45fbc7f8e46dd73185e68295696d1297887` (`dsh-v0.1.6-alpha.2`) |
 
 The two are bridged by TEO patch 11: the framework sync adopted upstream's
@@ -44,6 +44,32 @@ release tag, its full commit SHA, and a re-run of
 `bun scripts/port-upstream.ts <clone>` against the new baseline.
 `bun run verify:baseline` fails when the pinned tag, commit SHA, or any
 package row is missing or inconsistent.
+
+## Generated build shape
+
+Upstream's workspace root builds every package the same way
+(`lib/types/{index,invariant,startup}.js` → one ESM bundle each), so a
+package-local `tsdown.config.ts` exists **only** where that default is wrong —
+an extra artifact, or a `deps` pin that keeps module identity. Those
+departures are load-bearing: `app-boot` declares a worker bundle in `files`
+and embeds the include plugin so the built tree and the host bind one Loader
+peer, and `scope`'s `neverBundle` keeps its invariant bundle on the root
+entry's carrier WeakMap. The port therefore copies a self-contained upstream
+config verbatim (through the same specifier rewrite as any other ported
+file) and only generates the default shape for packages that have none or
+whose config pulls in a preset Rigo replaces.
+
+Two gates keep the shape honest rather than assumed:
+
+- the port throws when a `files` entry names a built artifact that no entry
+  in the config it just wrote produces, and when an `exports` `development`
+  face names a source the package does not carry;
+- `bun run verify:packages` re-checks, after the build, that every declared
+  `files` entry and every `exports` target resolves to a file on disk.
+
+An `exports` entry whose `types` face is not under `lib/types/` is generated
+by upstream's Typert codegen, which Rigo does not port; such entries are
+dropped rather than advertised.
 
 ## Migration table
 
@@ -96,5 +122,36 @@ at the pinned commit.
 - `bun run audit:source` — finds unregistered local packages, missing
   manifest fields, license gaps, and KEEP rewrite drift.
 - `bun run verify:packages` — confirms licenses and source provenance enter
-  the release artifacts.
+  the release artifacts of the ported packages, and that EVERY workspace
+  package (ported or not) actually produces the `files` and `exports` targets
+  its manifest advertises. The second half matters because the migration
+  manifest lists only the 29 ported packages: without it, a Rigo-side package
+  can advertise `lib/index.js` that no build emits while every gate stays
+  green — which is exactly what the root `tsdown.config.ts` workspace `include`
+  once did.
 - `bun run verify:boundaries` — enforces the package dependency boundaries.
+
+## Dual runtime
+
+The migrated suites run under both Node (vitest) and Bun (`bun run test:bun`,
+which CI and `verify:compat` both invoke). Bun's runner is not a drop-in for
+vitest, so the port bridges the differences in `tests/support/vitest-bun-polyfill.ts`
+(`vi.waitFor`, `vi.stubEnv`, `vi.stubGlobal`, `expect.poll`, proxied-service
+`spyOn`) and marks structurally Node-only cases with `skipIf` at the exact
+`it`/`describe` boundary (`BUN_SKIPPED_TESTS`, `BUN_SKIPPED_SUITES`).
+
+Two gaps are not bridgeable and are excluded by `scripts/test-bun.ts` instead:
+
+- **Files bun:test cannot load at all** — module scope calling `vi.hoisted`,
+  or a partial mock rebuilt from `importOriginal`. Both are absent from
+  `bun:test`, and a dynamic import of the mocked specifier re-enters the mock
+  rather than reaching the native module. Listed in `BUN_UNSUPPORTED_TESTS`
+  with each reason; they still run in full under vitest.
+- **Rigo's `node:sqlite` integration suites** — Node-only by construction
+  (PRD D-003 makes SQLite the only shipped provider), so bun fails to RESOLVE
+  the builtin rather than to assert. The runner drops them by walking the
+  import graph from each suite; `@teoclub/api-sdk` and `@teoclub/work-base`
+  pull the provider in for every suite that builds a runtime facade.
+
+A passing `bun run test:bun` therefore means: every ported suite that CAN run
+under bun does, and nothing was dropped without a recorded reason.

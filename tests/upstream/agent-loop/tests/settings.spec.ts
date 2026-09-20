@@ -8,6 +8,7 @@ import SessionStore from '@teoclub/harness-session'
 import SystemPrompt from '@teoclub/harness-system-prompt'
 import ToolRuntime from '@teoclub/harness-tools'
 import AgentRegistry from '@teoclub/harness-agent'
+import SessionProjectionRegistry from '@teoclub/harness-session-projection'
 import { SettingsProvider } from '@teoclub/harness-settings'
 import type { SettingsNamespace } from '@teoclub/harness-settings'
 import AgentLoop, { AGENT_LOOP_SETTINGS_NAMESPACE } from '@teoclub/harness-agent-loop'
@@ -34,6 +35,7 @@ async function boot(): Promise<{ ctx: Context; settingsFiber: Fiber; loopFiber: 
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)

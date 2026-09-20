@@ -29,9 +29,8 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
       const result = await runTurn(created.agent, session, 'hi')
       // The canonical choreography appears in order (the log also carries
       // loop bookkeeping events like inbox splices and request headers).
-      const canonical = session.events.filter((event) => [
-        'turn/start', 'step/start', 'user/message', 'assistant/chunk',
-        'assistant/message', 'step/end', 'turn/end',
+      const canonical = session.snapshotEvents().filter((event) => [
+        'turn/start', 'step/start', 'user/message', 'assistant/message', 'step/end', 'turn/end',
       ].includes(event.type)).map((event) => event.type)
       // Consecutive chunk runs collapse (one per streamed chunk).
       const collapsed = canonical.filter((type, index) => type !== canonical[index - 1])
@@ -39,7 +38,6 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
         'turn/start',
         'step/start',
         'user/message',
-        'assistant/chunk',
         'assistant/message',
         'step/end',
         'turn/end',
@@ -82,8 +80,8 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
       expect(result.violations).toEqual([])
 
       // Canonical event families all present (SPEC §5.1).
-      const types = new Set(session.events.map((event) => event.type))
-      for (const family of ['turn/start', 'step/start', 'user/message', 'assistant/chunk', 'assistant/message', 'tool/call', 'tool/result', 'step/end', 'turn/end']) {
+      const types = new Set(session.snapshotEvents().map((event) => event.type))
+      for (const family of ['turn/start', 'step/start', 'user/message', 'assistant/message', 'tool/call', 'tool/result', 'step/end', 'turn/end']) {
         expect(types.has(family), family).toBe(true)
       }
       await created.dispose()
@@ -100,16 +98,23 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
       const session = sessionFor(handle, 'session_loop_chunks')
       const result = await runTurn(created.agent, session, 'stream')
       const step = result.turns[0]!.steps[0]!
-      // The streamed text deltas (one per character) assemble into the final
-      // assistant message; block boundaries and usage are chunk events too.
-      const chunks = session.events.filter((event) => event.type === 'assistant/chunk')
-      const deltaText = chunks.map((event) => (event.type === 'assistant/chunk' ? event.data.chunk : ''))
-        .filter((chunk): chunk is { type: 'text-delta'; text: string } => chunk.type === 'text-delta')
-        .map((chunk) => chunk.text)
+      // The streamed deltas assemble into the settled assistant message.
+      //
+      // 0.1.6 removed the per-delta `assistant/chunk` event: an attempt that
+      // actually streamed settles as `assistant/attempt` carrying the packed
+      // `stream: AssistantStreamRecord[]`, and the mock's canned responses are
+      // not streamed at all, so the durable result here is the `assistant/message`
+      // alone and the step's chunk counter stays 0.
+      const messages = session.snapshotEvents().filter((event) => event.type === 'assistant/message')
+      const assembled = messages
+        .flatMap((event) => event.data.message.content)
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
         .join('')
-      expect(deltaText).toBe('streamed answer')
+      expect(assembled).toBe('streamed answer')
       expect(step.assistantText).toBe('streamed answer')
-      expect(step.chunks).toBe(chunks.length)
+      expect(session.snapshotEvents().some((event) => event.type === 'assistant/attempt')).toBe(false)
+      expect(step.chunks).toBe(0)
       expect(result.violations).toEqual([])
       await created.dispose()
     } finally {
@@ -166,8 +171,8 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
 
       // The durable log records the attempted call (loop fact), but the torn
       // guard DENIED dispatch: the tool never executed and no Action ran.
-      expect(session.events.filter((event) => event.type === 'tool/call')).toHaveLength(1)
-      const results = session.events.filter((event) => event.type === 'tool/result')
+      expect(session.snapshotEvents().filter((event) => event.type === 'tool/call')).toHaveLength(1)
+      const results = session.snapshotEvents().filter((event) => event.type === 'tool/result')
       expect(results).toHaveLength(1)
       const block = results[0]!.type === 'tool/result' ? results[0]!.data.message.content[0] : undefined
       expect(block?.isError).toBe(true)
@@ -205,8 +210,7 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
   })
 
   it('flags a choreography violation (tool result without a preceding call)', () => {
-    const session = {
-      events: [
+    const events = [
         { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
         { type: 'step/start', seq: 1, time: 2, data: { turn: 1, step: 1 } },
         {
@@ -222,8 +226,10 @@ describe('Rigo default agent-loop protocol (Issue 014)', () => {
         },
         { type: 'step/end', seq: 3, time: 4, data: { turn: 1, step: 1 } },
         { type: 'turn/end', seq: 4, time: 5, data: { turn: 1, reason: { kind: 'completed' } } },
-      ],
-    } as never
+    ] as never
+    // The validator reads through the Session reader; the stub models only what
+    // it touches.
+    const session = { snapshotEvents: () => events }
     const violations = assertTurnChoreography(session as never)
     expect(violations.map((violation) => violation.code)).toEqual(['TOOL_RESULT_UNMATCHED'])
   })

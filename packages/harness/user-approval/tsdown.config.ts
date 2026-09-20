@@ -1,6 +1,11 @@
 import { defineConfig } from 'tsdown'
 
-/** Ported build shape: each source entry becomes an independent ESM bundle. */
+/**
+ * Build index and the invariant companion as separate single-entry bundles.
+ * Both entries import src/types.ts (the browser-safe subpath), so a
+ * multi-entry build emits a shared chunk the package's exact `files`
+ * whitelist omits; separate builds inline it.
+ */
 export default defineConfig([
   {
     entry: ['lib/types/index.js'],
@@ -21,4 +26,5 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-  },])
+  },
+])

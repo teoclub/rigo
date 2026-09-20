@@ -21,7 +21,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { PACKAGES } from './lib/baseline.ts'
 
-const root = resolve(import.meta.dir, '..')
+const root = resolve(import.meta.dirname, '..')
 let failures = 0
 
 function fail(message: string): void {

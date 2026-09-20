@@ -1,11 +1,11 @@
-/** Package-owned scoped-dispatch invariants. @module @deepseek-ai/dsh-scope/invariant */
+/** Package-owned scoped-dispatch invariants. @module @teoclub/harness-scope/invariant */
 
 import type { Context } from '@teoclub/cordis'
 import type { InvariantInstaller } from '@teoclub/harness-invariants'
 import { carrierKeyOf, isScopeCarrier } from '@teoclub/harness-scope'
 import { scopedSubjectResolverFor } from './scoped-events.generated.ts'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-scope'
+const PACKAGE_NAME = '@teoclub/harness-scope'
 
 /** Cordis companion plugin name. */
 export const name = 'scope-invariant'

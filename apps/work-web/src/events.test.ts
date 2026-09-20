@@ -3,41 +3,53 @@
  * into the UI state — incremental output, phases, sources, empty retrieval.
  */
 import { describe, expect, it } from 'vitest'
-import { actionStateLabel, chunkText, foldEvent, initialViewModel, phaseLabel, sourcesFromRetrieval } from './events.ts'
+import type { SseFrame } from './api.ts'
+import { actionStateLabel, attemptText, foldEvent, initialViewModel, phaseLabel, sourcesFromRetrieval } from './events.ts'
 
-function frame(event: string, data: Record<string, unknown>): import('./api.ts').SseFrame {
+function frame(event: string, data: Record<string, unknown>): SseFrame {
   return { id: 0, event, data }
 }
 
 describe('work web event derivation (Issue 033)', () => {
-  it('accumulates assistant chunks incrementally, never from a raw provider stream', () => {
+  it('renders the latest assistant attempt snapshot, never a raw provider stream', () => {
+    const attempt = (seq: number, stream: unknown[]): SseFrame => frame('session.event', {
+      seq,
+      type: 'assistant/attempt',
+      payload: { turn: 1, step: 1, stream },
+    })
+    const textRun = (texts: string[]): Record<string, unknown> => ({ type: 'text-chunks', time0: 0, index: 0, dt: [], texts })
+
     let view = initialViewModel()
     view = foldEvent(view, frame('session.event', { seq: 0, type: 'turn/start', payload: { turn: 1 } }))
     expect(view.agentStatus).toBe('running')
     expect(view.phase).toBe('context')
-    view = foldEvent(view, frame('session.event', {
-      seq: 1,
-      type: 'assistant/chunk',
-      payload: { turn: 1, step: 1, chunk: { type: 'text', text: 'Hello' } },
-    }))
+
+    view = foldEvent(view, attempt(1, [textRun(['Hello'])]))
     expect(view.assistantText).toBe('Hello')
     expect(view.phase).toBe('llm')
-    view = foldEvent(view, frame('session.event', {
-      seq: 2,
-      type: 'assistant/chunk',
-      payload: { turn: 1, step: 1, chunk: { type: 'text', text: ' world' } },
-    }))
+
+    // Each attempt event carries the WHOLE attempt so far, so a later one
+    // replaces the rendered text; appending would duplicate what is shown.
+    view = foldEvent(view, attempt(2, [textRun(['Hello', ' world'])]))
     expect(view.assistantText).toBe('Hello world')
-    view = foldEvent(view, frame('session.event', {
-      seq: 3,
-      type: 'assistant/chunk',
-      payload: { turn: 1, step: 1, chunk: { type: 'reasoning', text: 'thinking…' } },
-    }))
+
+    view = foldEvent(view, attempt(3, [
+      textRun(['Hello', ' world']),
+      { type: 'reasoning-chunks', time0: 0, index: 1, dt: [], texts: ['thinking…'] },
+    ]))
     expect(view.reasoningText).toBe('thinking…')
     expect(view.assistantText).toBe('Hello world')
-    view = foldEvent(view, frame('session.event', { seq: 4, type: 'turn/end', payload: { turn: 1, reason: { kind: 'completed' } } }))
+
+    // A tool-call run carries no text: the rendered answer is left as it was.
+    view = foldEvent(view, attempt(4, [
+      textRun(['Hello', ' world']),
+      { type: 'tool-call-chunks', time0: 0, index: 1, dt: [], id: 'c1', args: ['{}'] },
+    ]))
+    expect(view.assistantText).toBe('Hello world')
+
+    view = foldEvent(view, frame('session.event', { seq: 5, type: 'turn/end', payload: { turn: 1, reason: { kind: 'completed' } } }))
     expect(view.agentStatus).toBe('idle')
-    expect(view.lastSeq).toBe(4)
+    expect(view.lastSeq).toBe(5)
   })
 
   it('derives the detailed phases and approval/action progress', () => {
@@ -122,11 +134,83 @@ describe('work web event derivation (Issue 033)', () => {
     expect(actionStateLabel('mystery')).toBe('mystery')
   })
 
-  it('extracts text from chunk payloads only when present', () => {
-    expect(chunkText({ chunk: { type: 'text', text: 'hi' } })).toEqual({ text: 'hi' })
-    expect(chunkText({ chunk: { type: 'reasoning', text: 'r' } })).toEqual({ reasoning: 'r' })
-    expect(chunkText({ chunk: {} })).toEqual({})
-    expect(chunkText({})).toEqual({})
+  it('renders a completed assistant message even when the turn never streamed', () => {
+    let view = initialViewModel()
+    view = foldEvent(view, frame('session.event', { seq: 0, type: 'turn/start', payload: { turn: 1 } }))
+    // A one-shot provider answer: no assistant/attempt, no deltas — the text
+    // exists only on the message event's content blocks.
+    view = foldEvent(view, frame('session.event', {
+      seq: 1,
+      type: 'assistant/message',
+      payload: {
+        turn: 1,
+        step: 1,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'rockets use fuel' }] },
+      },
+    }))
+    expect(view.assistantText).toBe('rockets use fuel')
+    expect(view.phase).toBe('llm')
+
+    // A message with no text block leaves the rendered answer untouched.
+    view = foldEvent(view, frame('session.event', {
+      seq: 2,
+      type: 'assistant/message',
+      payload: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'tool-call' }] } },
+    }))
+    expect(view.assistantText).toBe('rockets use fuel')
+  })
+
+  it('surfaces a failed turn instead of leaving an empty answer', () => {
+    let view = initialViewModel()
+    view = foldEvent(view, frame('session.event', { seq: 0, type: 'turn/start', payload: { turn: 1 } }))
+    // A provider that never started reports the failure inside the attempt's
+    // finish chunk (reason.failure), before turn/end arrives.
+    view = foldEvent(view, frame('session.event', {
+      seq: 1,
+      type: 'assistant/attempt',
+      payload: {
+        turn: 1,
+        step: 1,
+        stream: [{
+          type: 'chunk',
+          time: 1,
+          chunk: { type: 'finish', reason: { kind: 'error', failure: { message: 'no adapter', code: 'NO_ADAPTER' } } },
+        }],
+      },
+    }))
+    expect(view.turnError).toEqual({ message: 'no adapter', code: 'NO_ADAPTER' })
+    expect(view.assistantText).toBe('')
+
+    // turn/end carries the same facts under `reason.error`.
+    view = foldEvent(view, frame('session.event', {
+      seq: 2,
+      type: 'turn/end',
+      payload: { turn: 1, reason: { kind: 'error', error: { message: 'budget exhausted', code: 'LIMIT' } } },
+    }))
+    expect(view.turnError).toEqual({ message: 'budget exhausted', code: 'LIMIT' })
+
+    // A clean turn leaves no failure behind.
+    view = foldEvent(view, frame('session.event', { seq: 3, type: 'turn/start', payload: { turn: 2 } }))
+    expect(view.turnError).toBeUndefined()
+    view = foldEvent(view, frame('session.event', {
+      seq: 4,
+      type: 'turn/end',
+      payload: { turn: 2, reason: { kind: 'completed' } },
+    }))
+    expect(view.turnError).toBeUndefined()
+  })
+
+  it('extracts text from an attempt stream only when present', () => {
+    const run = (type: string, texts: unknown[]): Record<string, unknown> => ({ type, time0: 0, index: 0, dt: [], texts })
+    expect(attemptText({ stream: [run('text-chunks', ['hi', ' there'])] })).toEqual({ text: 'hi there' })
+    expect(attemptText({ stream: [run('reasoning-chunks', ['r'])] })).toEqual({ reasoning: 'r' })
+    expect(attemptText({ stream: [run('text-chunks', ['a']), run('reasoning-chunks', ['b'])] }))
+      .toEqual({ text: 'a', reasoning: 'b' })
+    // A run with no string parts contributes nothing rather than an empty key.
+    expect(attemptText({ stream: [run('text-chunks', [])] })).toEqual({})
+    expect(attemptText({ stream: [run('tool-call-chunks', ['{"a":1}'])] })).toEqual({})
+    expect(attemptText({ stream: [] })).toEqual({})
+    expect(attemptText({})).toEqual({})
   })
 
   it('reconstructs a multi-turn transcript from user messages and turn boundaries', () => {
@@ -139,8 +223,8 @@ describe('work web event derivation (Issue 033)', () => {
     }))
     view = foldEvent(view, frame('session.event', {
       seq: 2,
-      type: 'assistant/chunk',
-      payload: { turn: 1, step: 1, chunk: { type: 'text', text: 'first answer' } },
+      type: 'assistant/attempt',
+      payload: { turn: 1, step: 1, stream: [{ type: 'text-chunks', time0: 0, index: 0, dt: [], texts: ['first answer'] }] },
     }))
     view = foldEvent(view, frame('session.event', { seq: 3, type: 'turn/end', payload: { turn: 1, reason: { kind: 'completed' } } }))
     expect(view.messages).toEqual([{ id: 'user-1', role: 'user', text: 'first question' }])

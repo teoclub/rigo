@@ -1,0 +1,20 @@
+{
+  "$comment": "Types the repo's own tooling. scripts/ was in NO TypeScript project until this file existed, which is how `bun run dev` shipped a stale import of a renamed symbol (CallId -> ToolCallId) through a whole baseline upgrade without anything reporting it. Referenced from the root tsconfig so `tsc -b` covers it.",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "lib/types",
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../packages/bundle/work-base" },
+    { "path": "../packages/harness/agent-loop" },
+    { "path": "../packages/harness/llm-mock" },
+    { "path": "../packages/shared/knowledge-sqlite-fts" },
+    { "path": "../packages/shared/session-persistence-sqlite" },
+    { "path": "../packages/shared/storage-sqlite-node" },
+    { "path": "../vendor/cordis/packages/cordis" },
+    { "path": "../vendor/cordis/packages/plugins/include" }
+  ]
+}

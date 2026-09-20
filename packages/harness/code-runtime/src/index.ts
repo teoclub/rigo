@@ -1,34 +1,36 @@
 /**
- * Service Definition for the code-execution capability seam that runs one model-written program against host async bindings.
+ * Service Definition for the PTC execution capability seam that runs one model-written program against host async bindings.
  * Runtimes know nothing about tools or sessions; consumers own those concerns.
- * @module @deepseek-ai/dsh-code-runtime
+ * @module @teoclub/harness-code-runtime
  */
 
 import { Context, Service } from '@teoclub/cordis'
-import type { CodeRunRequest, CodeRunResult } from './types.ts'
+import type { PtcRunRequest, PtcRunResult, PtcRunSpec } from './types.ts'
+import type { SandboxMode } from '@teoclub/harness-sandbox'
 
 export type {
-  CodeBindingErrorClass,
-  CodeBindingFunction,
-  CodeBindingNamespace,
-  CodeJsonValue,
-  CodeRunFailure,
-  CodeRunRequest,
-  CodeRunResult,
+  PtcBindingErrorClass,
+  PtcBindingFunction,
+  PtcBindingNamespace,
+  PtcJsonValue,
+  PtcRunFailure,
+  PtcRunRequest,
+  PtcRunResult,
+  PtcRunSpec,
+  PtcRunSandbox,
 } from './types.ts'
 
 /**
  * Binding globals EVERY backend refuses because SOME backend owns the slot in
- * the program's namespace: `console` (the worker's log capture), and
+ * the program's namespace: `console` (Node's log capture), and
  * `__dsh_main__`/`__builtins__`/`__name__` (the Python backend's bootstrap
- * wrapper and seeded module globals; see the [portable-identifier Agent
- * Note](../../../../.agents/notes/implemented/architecture/2026-07-31-code-runtime-portable-identifier-seam.md)),
+ * wrapper and seeded module globals),
  * and `__debug__`. One shared set — rather than each backend refusing only its
  * own slots — keeps the portability promise real: a namespace list valid on
  * one backend is valid on all, so a caller cannot pick a name that works on
- * the worker and collides on Python (or vice versa). `__name__` et al. ARE
+ * Node and collides on Python (or vice versa). `__name__` et al. ARE
  * valid portable identifiers, so the identifier rule on
- * `CodeBindingNamespace.global` never rejects them — hence this explicit set.
+ * `PtcBindingNamespace.global` never rejects them — hence this explicit set.
  * (Error members differ: {@link DUNDER_MEMBER} refuses every dunder form
  * wholesale; binding globals refuse only the names listed here.) `__debug__`
  * is listed for a different reason than a collision: CPython compiles a bare
@@ -43,7 +45,7 @@ export const RESERVED_BINDING_GLOBALS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * `CodeBindingErrorClass.memberNameProperty` names EVERY backend refuses, as
+ * `PtcBindingErrorClass.memberNameProperty` names EVERY backend refuses, as
  * one shared contract so a request valid on one backend is valid on all. The
  * JS `Error` exclusions (`name`, `message`, `stack`) and Python's
  * exception-protocol members (`args`, `with_traceback`, `add_note`) are
@@ -65,9 +67,9 @@ export const DUNDER_MEMBER = /^__.+__$/
 
 /**
  * Reserved words of every portable target language (ECMAScript ∪ Python),
- * refused as {@link CodeBindingNamespace.global} / error-class names by all
- * backends. Python is a portability target here even though only the
- * TypeScript worker has a published backend. The portable-identifier contract
+ * refused as {@link PtcBindingNamespace.global} / error-class names by all
+ * backends, one per language: the released TypeScript Node process and the
+ * experimental, private CPython subprocess. The portable-identifier contract
  * promises a namespace list valid on one backend is valid on every backend; a
  * per-language check would let `lambda` pass the TypeScript backend and fail
  * the Python one. Extending the seam with a new language means widening this
@@ -88,25 +90,26 @@ export const PORTABLE_RESERVED_WORDS: ReadonlySet<string> = new Set([
 
 declare module '@teoclub/cordis' {
   interface Context {
-    codeRuntime: CodeRuntime
+    ptcRuntime: PtcRuntime
   }
 }
 
 /**
- * Registers one `ctx.codeRuntime` implementation. Program, budget, abort, and substrate
- * failures resolve in {@link CodeRunResult}; only Service Definition contract misuse rejects. Implementations bridge
+ * Registers one `ctx.ptcRuntime` implementation. Program, budget, abort, and substrate
+ * failures resolve in {@link PtcRunResult}; only Service Definition contract misuse rejects. Implementations bridge
  * structured-cloneable bindings, materialize each declared namespace rejection
  * class, treat programs as hostile peers, isolate runs from one another, and
  * terminate and await in-flight runs during disposal.
  */
-export abstract class CodeRuntime extends Service {
+export abstract class PtcRuntime extends Service {
   /**
    * The source language {@link run} expects `program` to be written in, as a
    * lowercase identifier. Informational, not gating — a consumer that
    * generates language-specific presentation (typed SDK stubs, usage
    * instructions) switches on it and fails loud on a language it cannot
    * present. Well-known values: `'typescript'` and `'python'`, those
-   * `dsh-tools` presents; only `'typescript'` has a published backend.
+   * `dsh-tools` presents; the TypeScript backend is released, the Python
+   * backend is experimental and private (not published).
    */
   abstract readonly language: string
 
@@ -118,20 +121,33 @@ export abstract class CodeRuntime extends Service {
    */
   abstract readonly isolation: string
 
+  /** Provider-owned program usage guidance for consumers to present alongside the source language. */
+  get executionInstructions(): string { return '' }
+
+  /** Deployment file-policy mode, or undefined for a provider without confinement support. */
+  get sandboxMode(): SandboxMode | undefined { return undefined }
+
+  /** Configured numeric elapsed-time defaults and cap, or undefined when per-call overrides are unsupported. */
+  get timeout(): { defaultMs: number; maxMs: number } | undefined { return undefined }
+
   constructor(ctx: Context) {
-    super(ctx, 'codeRuntime')
+    super(ctx, 'ptcRuntime')
   }
 
   /**
-   * Execute one program against the request's bindings and capture what it
-   * emitted. See the class doc for the resolution contract (error is a result
-   * field; rejection means Service Definition contract misuse only).
-   * @param request - the program, its bindings, and the abort signal; the
-   *   request carries everything the runtime acts on, with no hidden defaults.
-   * @returns the run's outcome: completion value (when transferable), the
-   *   ordered log capture, and the failure (if any).
+   * Resolve supported options and provider defaults before execution.
+   * @param request - Program, bindings, cancellation and optional execution choices.
+   * @returns Complete directory, deadline and supported authority for run.
+   * @throws When an explicit choice is invalid or unsupported by this provider.
    */
-  abstract run(request: CodeRunRequest): Promise<CodeRunResult>
+  abstract resolve(request: PtcRunRequest): PtcRunSpec
+
+  /**
+   * Execute resolved inputs; program outcomes resolve as result fields.
+   * @param spec - directory, deadline, program, bindings, cancellation and supported policy.
+   * @returns Captured output and the execution outcome.
+   */
+  abstract run(spec: PtcRunSpec): Promise<PtcRunResult>
 }
 
-export default CodeRuntime
+export default PtcRuntime

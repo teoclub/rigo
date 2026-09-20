@@ -1,6 +1,7 @@
 // Bun polyfills for the vitest APIs `bun:test` lacks (SPEC §9.2 dual-runtime
 // requirement): `vi.waitFor`, `vi.stubEnv`, `vi.unstubAllEnvs`,
-// `vi.advanceTimersByTimeAsync`, and `expect.poll`. Under vitest the real
+// `vi.stubGlobal`, `vi.unstubAllGlobals`, `vi.advanceTimersByTimeAsync`, and
+// `expect.poll`. Under vitest the real
 // implementations exist, and this module's guards leave them untouched - so
 // both runners load the same test file unchanged.
 //
@@ -13,6 +14,8 @@ type PatchableVi = {
   waitFor?: unknown
   stubEnv?: unknown
   unstubAllEnvs?: unknown
+  stubGlobal?: unknown
+  unstubAllGlobals?: unknown
   advanceTimersByTimeAsync?: unknown
   advanceTimersByTime?: unknown
   getTimerCount?: unknown
@@ -71,6 +74,30 @@ if (g.__rigoViPatched !== true) {
 
   const unstubAllEnvs = (): void => {
     for (const name of stubbedEnvs.splice(0)) delete process.env[name]
+  }
+
+  /**
+   * `vi.stubGlobal(name, value)` - define a global for the duration of one
+   * test, remembering the property that was there so `unstubAllGlobals` can
+   * put it back exactly (a global may be an accessor, or absent entirely -
+   * `undefined` as the recorded original would leak a stub into later tests).
+   */
+  const stubbedGlobals = new Map<string, PropertyDescriptor | undefined>()
+  const stubGlobal = (name: string, value: unknown): void => {
+    const scope = globalThis as unknown as Record<string, unknown>
+    if (!stubbedGlobals.has(name)) {
+      stubbedGlobals.set(name, Object.getOwnPropertyDescriptor(scope, name))
+    }
+    Object.defineProperty(scope, name, { value, writable: true, configurable: true })
+  }
+
+  const unstubAllGlobals = (): void => {
+    const scope = globalThis as unknown as Record<string, unknown>
+    for (const [name, descriptor] of stubbedGlobals) {
+      if (descriptor === undefined) delete scope[name]
+      else Object.defineProperty(scope, name, descriptor)
+    }
+    stubbedGlobals.clear()
   }
 
   /**
@@ -149,6 +176,8 @@ if (g.__rigoViPatched !== true) {
   if (typeof vi.waitFor !== 'function') vi.waitFor = waitFor as NonNullable<PatchableVi['waitFor']>
   if (typeof vi.stubEnv !== 'function') vi.stubEnv = stubEnv as NonNullable<PatchableVi['stubEnv']>
   if (typeof vi.unstubAllEnvs !== 'function') vi.unstubAllEnvs = unstubAllEnvs as NonNullable<PatchableVi['unstubAllEnvs']>
+  if (typeof vi.stubGlobal !== 'function') vi.stubGlobal = stubGlobal as NonNullable<PatchableVi['stubGlobal']>
+  if (typeof vi.unstubAllGlobals !== 'function') vi.unstubAllGlobals = unstubAllGlobals as NonNullable<PatchableVi['unstubAllGlobals']>
   if (typeof vi.advanceTimersByTimeAsync !== 'function' && typeof vi.advanceTimersByTime === 'function' && typeof vi.getTimerCount === 'function') {
     vi.advanceTimersByTimeAsync = advanceTimersByTimeAsync as NonNullable<PatchableVi['advanceTimersByTimeAsync']>
   }
