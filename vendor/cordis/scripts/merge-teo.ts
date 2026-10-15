@@ -59,7 +59,7 @@ export const TEO_PATCHES: TeoPatch[] = [
   { dir: 'packages/cordis', rel: 'src/registry.ts', patch: 'G4', note: 'thenable-wrapper receiver safety' },
   { dir: 'packages/cordis', rel: 'bin.js', patch: 'P10', note: 'restart contract: exit code 51 for an outer supervisor' },
   { dir: 'packages/kit', rel: 'src/time.ts', patch: 'TEO', note: 'parseTimeValue split out; parseDate added' },
-  { dir: 'packages/kit', rel: 'src/types.ts', patch: 'TEO', note: 'cloneView(): type-preserving ArrayBufferView clone' },
+  { dir: 'packages/kit', rel: 'src/types.ts', patch: 'TEO', note: 'cloneView(): type-preserving ArrayBufferView clone; Map/Set/Weak support in clone() and deepEqual() (compare shares the cycle set)' },
   { dir: 'packages/plugins/loader', rel: 'src/index.ts', patch: 'P8', note: 'Node type references made structural' },
   { dir: 'packages/plugins/loader', rel: 'src/internal.ts', patch: 'P8/upstream', note: 'shape detection adopted from upstream; JSDoc only local delta' },
   { dir: 'packages/plugins/include', rel: 'src/index.ts', patch: 'P8/P13/P14', note: 'structural Node types; writeTask widening; durable debounced writes' },

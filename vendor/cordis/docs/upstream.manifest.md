@@ -4,22 +4,22 @@
 > in [`upstream.md`](upstream.md).
 
 - **Source repository**: deepseek-ai/deepseek-harness (public clone)
-- **Pinned commit**: `ddefc45fbc7f8e46dd73185e68295696d1297887`
-- **Audit date**: 2026-09-18
+- **Pinned commit**: `2fbf4359b82fb94c03dcce0b831660d87f12ea5c`
+- **Audit date**: 2026-10-15
 
 ## Manifest
 
 | Directory | Upstream package | TEO Club package | Version | Manifest version | Drift | License |
 |---|---|---|---|---|---|---|
-| `cosmokit/` | `@deepseek-ai/cosmokit` | `@teoclub/kit` | 1.8.3 | 1.8.1 | ⚠️ yes | MIT |
-| `schemastery/` | `@deepseek-ai/schemastery` | `@teoclub/schemastery` | 3.18.2 | 3.18.0 | ⚠️ yes | MIT |
-| `cordis/` | `@deepseek-ai/cordis` | `@teoclub/cordis` | 4.0.2 | 4.0.0-rc.7 | ⚠️ yes | MIT |
-| `loader/` | `@deepseek-ai/cordis-plugin-loader` | `@teoclub/cordis-plugin-loader` | 1.0.3 | 1.0.0-rc.5 | ⚠️ yes | MIT |
-| `include/` | `@deepseek-ai/cordis-plugin-include` | `@teoclub/cordis-plugin-include` | 1.0.7 | 1.0.4 | ⚠️ yes | MIT |
-| `group/` | `@deepseek-ai/cordis-plugin-group` | `@teoclub/cordis-plugin-group` | 1.0.2 | 1.0.0 | ⚠️ yes | MIT |
-| `timer/` | `@deepseek-ai/cordis-plugin-timer` | `@teoclub/cordis-plugin-timer` | 1.1.4 | 1.1.2 | ⚠️ yes | MIT |
-| `hmr/` | `@deepseek-ai/cordis-plugin-hmr` | `@teoclub/cordis-plugin-hmr` | 1.0.17 | 1.0.15 | ⚠️ yes | MIT |
-| `logger-console/` | `@deepseek-ai/cordis-plugin-logger-console` | `@teoclub/cordis-plugin-logger-console` | 1.0.2 | 1.0.0 | ⚠️ yes | MIT |
+| `cosmokit/` | `@deepseek-ai/cosmokit` | `@teoclub/kit` | 1.8.6-alpha.2 | 1.8.1 | ⚠️ yes | MIT |
+| `schemastery/` | `@deepseek-ai/schemastery` | `@teoclub/schemastery` | 3.18.5-alpha.2 | 3.18.0 | ⚠️ yes | MIT |
+| `cordis/` | `@deepseek-ai/cordis` | `@teoclub/cordis` | 4.0.5-alpha.2 | 4.0.0-rc.7 | ⚠️ yes | MIT |
+| `loader/` | `@deepseek-ai/cordis-plugin-loader` | `@teoclub/cordis-plugin-loader` | 1.0.6-alpha.2 | 1.0.0-rc.5 | ⚠️ yes | MIT |
+| `include/` | `@deepseek-ai/cordis-plugin-include` | `@teoclub/cordis-plugin-include` | 1.0.10-alpha.2 | 1.0.4 | ⚠️ yes | MIT |
+| `group/` | `@deepseek-ai/cordis-plugin-group` | `@teoclub/cordis-plugin-group` | 1.0.5-alpha.2 | 1.0.0 | ⚠️ yes | MIT |
+| `timer/` | `@deepseek-ai/cordis-plugin-timer` | `@teoclub/cordis-plugin-timer` | 1.1.7-alpha.2 | 1.1.2 | ⚠️ yes | MIT |
+| `hmr/` | `@deepseek-ai/cordis-plugin-hmr` | `@teoclub/cordis-plugin-hmr` | 1.0.20-alpha.2 | 1.0.15 | ⚠️ yes | MIT |
+| `logger-console/` | `@deepseek-ai/cordis-plugin-logger-console` | `@teoclub/cordis-plugin-logger-console` | 1.0.5-alpha.2 | 1.0.0 | ⚠️ yes | MIT |
 
 ## Node-Specific API Usage (src/ + bin.js)
 
@@ -39,10 +39,10 @@
 
 | Package | Refs | Files |
 |---|---|---|
-| `@teoclub/kit` | 0 | — |
-| `@teoclub/schemastery` | 1 | `src/index.ts` |
-| `@teoclub/cordis` | 15 | `bin.js`, `src/context.ts`, `src/events.ts`, `src/fiber.ts`, `src/logger.ts`, `src/reflect.ts`, `src/registry.ts`, `src/service.ts`, `src/utils.ts` |
-| `@teoclub/cordis-plugin-loader` | 12 | `src/config/entry.ts`, `src/config/group.ts`, `src/config/isolate.ts`, `src/config/tree.ts`, `src/config/utils.ts`, `src/index.ts`, `src/internal.ts` |
+| `@teoclub/kit` | 1 | `src/volatile.ts` |
+| `@teoclub/schemastery` | 2 | `src/index.ts` |
+| `@teoclub/cordis` | 16 | `bin.js`, `src/context.ts`, `src/events.ts`, `src/fiber.ts`, `src/index.ts`, `src/logger.ts`, `src/reflect.ts`, `src/registry.ts`, `src/service.ts`, `src/utils.ts` |
+| `@teoclub/cordis-plugin-loader` | 15 | `src/config/diff.ts`, `src/config/entry.ts`, `src/config/group.ts`, `src/config/isolate.ts`, `src/config/tree.ts`, `src/config/utils.ts`, `src/index.ts`, `src/internal.ts` |
 | `@teoclub/cordis-plugin-include` | 2 | `src/index.ts` |
 | `@teoclub/cordis-plugin-group` | 1 | `src/index.ts` |
 | `@teoclub/cordis-plugin-timer` | 2 | `src/index.ts` |

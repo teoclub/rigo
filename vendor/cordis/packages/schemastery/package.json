@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/schemastery",
   "description": "Type driven schema validator",
-  "version": "3.18.2",
+  "version": "3.18.5",
   "type": "module",
   "main": "lib/index.cjs",
   "types": "lib/types/index.d.ts",
@@ -23,8 +23,8 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/schemastery",
       "upstreamPackage": "@deepseek-ai/schemastery",
-      "upstreamVersion": "3.18.2",
-      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
+      "upstreamVersion": "3.18.5-alpha.2",
+      "commit": "2fbf4359b82fb94c03dcce0b831660d87f12ea5c"
     }
   },
   "module": "lib/index.mjs",
@@ -49,6 +49,6 @@
   ],
   "dependencies": {
     "@standard-schema/spec": "^1.1.0",
-    "@teoclub/kit": "^1.8.3"
+    "@teoclub/kit": "~1.8.6"
   }
 }

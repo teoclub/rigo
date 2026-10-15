@@ -24,7 +24,7 @@ commit:
 
 | Surface | Revision | Recorded in |
 | --- | --- | --- |
-| `vendor/cordis` (this monorepo) | `ddefc45fbc7f8e46dd73185e68295696d1297887` (`dsh-v0.1.6-alpha.2`) | each vendored `package.json` `teoclub.source.commit`; `docs/upstream.manifest.md` |
+| `vendor/cordis` (this monorepo) | `2fbf4359b82fb94c03dcce0b831660d87f12ea5c` (`dsh-v0.2.1-alpha.3`) | each vendored `package.json` `teoclub.source.commit`; `docs/upstream.manifest.md` |
 | Harness mirror (`packages/harness/*`, `tests/upstream/*`) | `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e` (`dsh-v0.1.1-rc.2`) | `../../docs/upstream-baseline.md`, `scripts/lib/baseline.ts` |
 
 The skew is deliberate: re-syncing the framework did not re-port the harness packages. It is
@@ -199,6 +199,45 @@ the build enforces.
     gates it.
 
 ## Re-sync record
+
+### 2026-10-15 — `dsh-v0.2.1-alpha.3` (`ddefc45` -> `2fbf435`)
+
+Upstream's volatile config work (`3f7016a`, "add volatile schemas and watcher-driven
+updates") dominates this sync. Upstream's `vendor/` moved across nine release commits:
+`cordis` 4.0.2 -> 4.0.5-alpha.2, and the other eight packages to their `-alpha.2` lines
+(25 files, +425/-101 lines). Adopted in full:
+
+- **Volatile config references.** `cosmokit` gains `src/volatile.ts`, and `schemastery`
+  marks schema fields volatile. `loader` commits a volatile-only config edit into the
+  running fiber without a remount and emits `loader/volatile-update` to the owning fiber.
+  Any other change still follows the ordinary update lifecycle. `Entry.moduleNamespace`
+  is added (`b1c5f86`); the boot-level HMR that sets it is not ported, so Rigo leaves it unset.
+- **`deepEqual` rewritten** around an inner `compare` that shares one cycle set: volatile
+  references compare equal, URLs compare by `href`, and opaque objects compare by identity
+  under `strict`. Upstream has no Map/Set/WeakMap/WeakSet/Promise branches. The TEO branches
+  were ported onto `compare`, not onto calls to the exported `deepEqual` from inside Map/Set,
+  which would start a fresh cycle set at every level. This is the only hand merge (`packages/kit/src/types.ts`).
+- **Workspace ranges.** Upstream moved `workspace:^` to `workspace:~` (`4e6028a`).
+  `rescope.ts` now converts `workspace:~` to `~<version>`; before this it would have emitted
+  a bare `~`.
+- **Versions.** The eight packages are on upstream `-alpha.2` prereleases. A `*` range in
+  Rigo's workspace does not match a prerelease, so their TEO versions take the base of each
+  line (`1.8.6`, `3.18.5`, `1.0.6`, `1.0.10`, `1.0.5`, `1.1.7`, `1.0.20`, `1.0.5`). The exact
+  upstream version stays in `teoclub.source.upstreamVersion`; the rule is documented on
+  `PkgSpec` in `scripts/rescope.ts`. `@teoclub/cordis` moves 6.0.0 -> 6.1.0: the change is
+  additive (the `Volatile` type re-exports and the volatile behavior), so it is not a BC-4 major.
+- **Third party.** `loader` bumps `node-addon-require-builtin` to `^0.1.9`.
+- **Gate changes.** `verify-old-scopes` allows `Symbol.for('cosmokit.` keys, which are
+  cross-copy registry identifiers kept verbatim like `Symbol.for('schemastery')`.
+  `verify-packages` expects the new versions.
+- **Not vendored.** `timer`'s `locale/*.json` (upstream i18n strings). Timer's source never
+  imported them, so the omission is unchanged from the previous sync.
+
+Verification: the ledger has 13 rows, 12 merged cleanly and 1 hand merge. `verify-teo-patches`
+matches the tree. `tsc -b`, `tsdown`, `verify-packages`, and `verify-old-scopes` pass.
+`bun test` (conformance, integration, package, bun) passes with 74 pass and 1 skip. Vitest on
+Node v24.14.0 gives 85 pass and 5 fail. All 5 failures are in `tests/integration/loader-include.spec.ts`,
+and the same 5 fail at the pre-sync HEAD, so they predate this sync. Their cause is not investigated here.
 
 ### 2026-09-18 — `dsh-v0.1.6-alpha.2` (`b150a55` -> `ddefc45`)
 

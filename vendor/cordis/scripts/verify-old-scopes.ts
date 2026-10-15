@@ -42,6 +42,8 @@ const EXEMPT_LINE_PATTERNS = [
   /@cordisjs\/unyaml/,
   /`@cordisjs\/utils`/,
   /This package continues \[cosmokit\]/,
+  // Global Symbol.for keys are wire identifiers shared across package copies, kept verbatim like Symbol.for('schemastery').
+  /Symbol\.for\(['"]cosmokit\./,
 ]
 
 async function* walk(dir: string): AsyncIterable<string> {

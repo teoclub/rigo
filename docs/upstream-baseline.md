@@ -25,7 +25,7 @@ is an independent monorepo with its own pin, recorded in each vendored
 | Surface | Revision |
 | --- | --- |
 | Harness mirror (this document) | `0a15e36e7f82b6ed45af6fa9759f29b40dcd965d` (`dsh-v0.1.6-alpha.1`) |
-| `vendor/cordis` | `ddefc45fbc7f8e46dd73185e68295696d1297887` (`dsh-v0.1.6-alpha.2`) |
+| `vendor/cordis` | `2fbf4359b82fb94c03dcce0b831660d87f12ea5c` (`dsh-v0.2.1-alpha.3`) |
 
 The two are bridged by TEO patch 11: the framework sync adopted upstream's
 transactional-reload revert, while the harness packages keep their original

@@ -6,6 +6,46 @@ the three categories used by this project: **Breaking**, **Fix**,
 Bun engines). This file is managed in the Changesets style; automated
 releases use the `cordis-v5` release-train tag.
 
+## 2026-10-15 - Upstream re-sync: volatile config references
+
+Re-synced from upstream `dsh-v0.2.1-alpha.3` (`2fbf435`), previously `ddefc45`. The main
+change is volatile config references (upstream `3f7016a`): a config value can be read through
+a stable reference that updates in place. Packages on an upstream `-alpha.N` line carry the base
+version, so `*` ranges in the workspace resolve; the exact upstream version is in
+`teoclub.source.upstreamVersion`. See `docs/upstream.md` for the complete record.
+
+### `@teoclub/cordis` 6.1.0
+
+Re-exports the `Volatile` and `VolatileSnapshot` types from `@teoclub/kit`. This is additive, so
+the bump is minor. Dependency ranges on `@teoclub/kit` and the plugins move to `~`.
+
+### `@teoclub/kit` 1.8.6
+
+Continues cosmokit 1.8.6-alpha.2. Adds `volatile.ts`. `deepEqual` treats volatile references as
+equal, compares URLs by `href`, and shares one cycle set across a comparison. The TEO Map, Set,
+WeakMap, WeakSet, and Promise handling is kept.
+
+### `@teoclub/schemastery` 3.18.5
+
+Continues `@deepseek-ai/schemastery` 3.18.5-alpha.2. Adds volatile schema fields.
+
+### `@teoclub/cordis-plugin-loader` 1.0.6
+
+**Runtime-diff**
+
+- A volatile-only config edit commits in place, and `loader/volatile-update` is emitted to the
+  owning fiber.
+
+**Fix**
+
+- `internal/update` calls the config `simplify` hook with the runtime `Config` as `this`.
+- `node-addon-require-builtin` moves to `^0.1.9`.
+
+### `@teoclub/cordis-plugin-include` 1.0.10, `@teoclub/cordis-plugin-group` 1.0.5, `@teoclub/cordis-plugin-timer` 1.1.7, `@teoclub/cordis-plugin-hmr` 1.0.20, `@teoclub/cordis-plugin-logger-console` 1.0.5
+
+Continue their upstream `-alpha.2` lines at the base versions. Source is unchanged apart from the rescope; the dependency
+ranges move to `~`.
+
 ## 2026-09-18 - Upstream re-sync: the transactional reload revert
 
 Re-synced from upstream `dsh-v0.1.6-alpha.2` (`ddefc45`). Upstream reverted its

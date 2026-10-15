@@ -27,21 +27,26 @@ interface PkgSpec {
   destDir: string
   oldName: string
   newName: string
-  /** TEO Club release version (SPEC D5 / §3.1) */
+  /**
+   * TEO Club release version (SPEC D5 / §3.1). For the eight packages this is the
+   * base of the upstream line with any prerelease suffix dropped: a `*` range in
+   * the Rigo workspace does not match `1.8.6-alpha.2`. The exact upstream
+   * version still goes to `teoclub.source.upstreamVersion`.
+   */
   version: string
   description: string
 }
 
 export const PACKAGES: PkgSpec[] = [
-  { vendorDir: 'cosmokit', destDir: 'packages/kit', oldName: '@deepseek-ai/cosmokit', newName: '@teoclub/kit', version: '1.8.3', description: 'A collection of common utilities' },
-  { vendorDir: 'schemastery', destDir: 'packages/schemastery', oldName: '@deepseek-ai/schemastery', newName: '@teoclub/schemastery', version: '3.18.2', description: 'Type driven schema validator' },
-  { vendorDir: 'cordis', destDir: 'packages/cordis', oldName: '@deepseek-ai/cordis', newName: '@teoclub/cordis', version: '6.0.0', description: 'Meta-Framework for Modern JavaScript Applications' },
-  { vendorDir: 'loader', destDir: 'packages/plugins/loader', oldName: '@deepseek-ai/cordis-plugin-loader', newName: '@teoclub/cordis-plugin-loader', version: '1.0.3', description: 'Plugin loader for cordis' },
-  { vendorDir: 'include', destDir: 'packages/plugins/include', oldName: '@deepseek-ai/cordis-plugin-include', newName: '@teoclub/cordis-plugin-include', version: '1.0.7', description: 'Include files in cordis configurations' },
-  { vendorDir: 'group', destDir: 'packages/plugins/group', oldName: '@deepseek-ai/cordis-plugin-group', newName: '@teoclub/cordis-plugin-group', version: '1.0.2', description: 'Nested plugin group for cordis' },
-  { vendorDir: 'timer', destDir: 'packages/plugins/timer', oldName: '@deepseek-ai/cordis-plugin-timer', newName: '@teoclub/cordis-plugin-timer', version: '1.1.4', description: 'Timer service for cordis' },
-  { vendorDir: 'hmr', destDir: 'packages/plugins/hmr', oldName: '@deepseek-ai/cordis-plugin-hmr', newName: '@teoclub/cordis-plugin-hmr', version: '1.0.17', description: 'Hot Module Replacement Plugin for Cordis' },
-  { vendorDir: 'logger-console', destDir: 'packages/plugins/logger-console', oldName: '@deepseek-ai/cordis-plugin-logger-console', newName: '@teoclub/cordis-plugin-logger-console', version: '1.0.2', description: 'Console logger exporter for cordis' },
+  { vendorDir: 'cosmokit', destDir: 'packages/kit', oldName: '@deepseek-ai/cosmokit', newName: '@teoclub/kit', version: '1.8.6', description: 'A collection of common utilities' },
+  { vendorDir: 'schemastery', destDir: 'packages/schemastery', oldName: '@deepseek-ai/schemastery', newName: '@teoclub/schemastery', version: '3.18.5', description: 'Type driven schema validator' },
+  { vendorDir: 'cordis', destDir: 'packages/cordis', oldName: '@deepseek-ai/cordis', newName: '@teoclub/cordis', version: '6.1.0', description: 'Meta-Framework for Modern JavaScript Applications' },
+  { vendorDir: 'loader', destDir: 'packages/plugins/loader', oldName: '@deepseek-ai/cordis-plugin-loader', newName: '@teoclub/cordis-plugin-loader', version: '1.0.6', description: 'Plugin loader for cordis' },
+  { vendorDir: 'include', destDir: 'packages/plugins/include', oldName: '@deepseek-ai/cordis-plugin-include', newName: '@teoclub/cordis-plugin-include', version: '1.0.10', description: 'Include files in cordis configurations' },
+  { vendorDir: 'group', destDir: 'packages/plugins/group', oldName: '@deepseek-ai/cordis-plugin-group', newName: '@teoclub/cordis-plugin-group', version: '1.0.5', description: 'Nested plugin group for cordis' },
+  { vendorDir: 'timer', destDir: 'packages/plugins/timer', oldName: '@deepseek-ai/cordis-plugin-timer', newName: '@teoclub/cordis-plugin-timer', version: '1.1.7', description: 'Timer service for cordis' },
+  { vendorDir: 'hmr', destDir: 'packages/plugins/hmr', oldName: '@deepseek-ai/cordis-plugin-hmr', newName: '@teoclub/cordis-plugin-hmr', version: '1.0.20', description: 'Hot Module Replacement Plugin for Cordis' },
+  { vendorDir: 'logger-console', destDir: 'packages/plugins/logger-console', oldName: '@deepseek-ai/cordis-plugin-logger-console', newName: '@teoclub/cordis-plugin-logger-console', version: '1.0.5', description: 'Console logger exporter for cordis' },
 ]
 
 /**
@@ -59,15 +64,15 @@ const RENAME_MAP = new Map(PACKAGES.map((p) => [p.oldName, p]))
 /** Upstream cordiverse names that also appear in vendored READMEs/docs. */
 const UPSTREAM_NAME_MAP = new Map(PACKAGES.filter((p) => p.oldName.includes('plugin')).map((p) => [`@cordisjs/plugin-${p.vendorDir}`, p]))
 const UPSTREAM_VERSION: Record<string, string> = {
-  '@teoclub/kit': '1.8.3',
-  '@teoclub/schemastery': '3.18.2',
-  '@teoclub/cordis': '4.0.2',
-  '@teoclub/cordis-plugin-loader': '1.0.3',
-  '@teoclub/cordis-plugin-include': '1.0.7',
-  '@teoclub/cordis-plugin-group': '1.0.2',
-  '@teoclub/cordis-plugin-timer': '1.1.4',
-  '@teoclub/cordis-plugin-hmr': '1.0.17',
-  '@teoclub/cordis-plugin-logger-console': '1.0.2',
+  '@teoclub/kit': '1.8.6-alpha.2',
+  '@teoclub/schemastery': '3.18.5-alpha.2',
+  '@teoclub/cordis': '4.0.5-alpha.2',
+  '@teoclub/cordis-plugin-loader': '1.0.6-alpha.2',
+  '@teoclub/cordis-plugin-include': '1.0.10-alpha.2',
+  '@teoclub/cordis-plugin-group': '1.0.5-alpha.2',
+  '@teoclub/cordis-plugin-timer': '1.1.7-alpha.2',
+  '@teoclub/cordis-plugin-hmr': '1.0.20-alpha.2',
+  '@teoclub/cordis-plugin-logger-console': '1.0.5-alpha.2',
 }
 
 const root = resolve(import.meta.dir, '..')
@@ -159,6 +164,7 @@ function convertRange(name: string, range: string): string {
   if (!pkg) return range
   if (range.startsWith('workspace:')) {
     const suffix = range.slice('workspace:'.length)
+    if (suffix === '~') return `~${pkg.version}`
     if (suffix === '*' || suffix === '^' || suffix === '') return `^${pkg.version}`
     return suffix
   }

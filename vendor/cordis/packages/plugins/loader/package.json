@@ -1,7 +1,7 @@
 {
   "name": "@teoclub/cordis-plugin-loader",
   "description": "Plugin loader for cordis",
-  "version": "1.0.3",
+  "version": "1.0.6",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -23,8 +23,8 @@
       "repository": "deepseek-ai/deepseek-harness",
       "path": "vendor/loader",
       "upstreamPackage": "@deepseek-ai/cordis-plugin-loader",
-      "upstreamVersion": "1.0.3",
-      "commit": "ddefc45fbc7f8e46dd73185e68295696d1297887"
+      "upstreamVersion": "1.0.6-alpha.2",
+      "commit": "2fbf4359b82fb94c03dcce0b831660d87f12ea5c"
     }
   },
   "exports": {
@@ -45,11 +45,12 @@
     "README.md"
   ],
   "dependencies": {
-    "@teoclub/kit": "^1.8.3"
+    "@teoclub/kit": "~1.8.6",
+    "@teoclub/schemastery": "~3.18.5"
   },
   "peerDependencies": {
-    "@teoclub/cordis": "^6.0.0",
-    "node-addon-require-builtin": "^0.1.6"
+    "@teoclub/cordis": "~6.1.0",
+    "node-addon-require-builtin": "^0.1.9"
   },
   "peerDependenciesMeta": {
     "node-addon-require-builtin": {
