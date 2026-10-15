@@ -94,26 +94,28 @@ at the pinned commit.
 | KEEP | `@deepseek-ai/dsh-session` | `packages/core/session` | `@teoclub/harness-session` | `packages/harness/session` |
 | KEEP | `@deepseek-ai/dsh-system-prompt` | `packages/core/system-prompt` | `@teoclub/harness-system-prompt` | `packages/harness/system-prompt` |
 | KEEP | `@deepseek-ai/dsh-agent` | `packages/core/agent` | `@teoclub/harness-agent` | `packages/harness/agent` |
-| KEEP | `@deepseek-ai/dsh-agent-tool-presentation` | `packages/core/agent-tool-presentation` | `@teoclub/harness-agent-tool-presentation` | `packages/harness/agent-tool-presentation` |
-| KEEP | `@deepseek-ai/dsh-agent-default-model` | `packages/core/agent-default-model` | `@teoclub/harness-agent-default-model` | `packages/harness/agent-default-model` |
 | KEEP | `@deepseek-ai/dsh-agent-loop` | `packages/core/agent-loop` | `@teoclub/harness-agent-loop` | `packages/harness/agent-loop` |
 | KEEP | `@deepseek-ai/dsh-user-approval` | `packages/interaction/user-approval` | `@teoclub/harness-user-approval` | `packages/harness/user-approval` |
 | KEEP | `@deepseek-ai/dsh-tools` | `packages/core/tools` | `@teoclub/harness-tools` | `packages/harness/tools` |
 | KEEP | `@deepseek-ai/dsh-session-persistence` | `packages/session/session-persistence` | `@teoclub/harness-session-persistence` | `packages/harness/session-persistence` |
 | ADAPT | `@deepseek-ai/dsh-settings` | `packages/settings/settings` | `@teoclub/harness-settings` | `packages/harness/settings` |
-| ADAPT | `@deepseek-ai/dsh-home-paths` | `packages/util/home-paths` | `@teoclub/harness-home-paths` | `packages/harness/home-paths` |
-| ADAPT | `@deepseek-ai/dsh-launch-environment` | `packages/util/launch-environment` | `@teoclub/harness-launch-environment` | `packages/harness/launch-environment` |
 | ADAPT | `@deepseek-ai/dsh-app-boot` | `packages/boot/app-boot` | `@teoclub/harness-app-boot` | `packages/harness/app-boot` |
 
 ### Not ported
 
 | Classification | Upstream package / path | Reason |
 | --- | --- | --- |
-| REPLACE | `@deepseek-ai/dsh-base` (`packages/bundle/base`) | Replaced by the new @teoclub/work-base bundle (Rigo Work product composition). |
+| REPLACE | `@deepseek-ai/dsh-base` (`packages/bundle/base`) | Replaced by the Rigo Work product bundle (removed from the minimal scaffold). |
 | REPLACE | `Coding packages (shell, lsp, sandbox, terminal, code-runtime backends)` (`packages/shell, packages/lsp, packages/sandbox, packages/terminal`) | Replaced by the minimal Rigo Code bundle (repository context + workspace file read/write) per PRD D-002. |
 | DROP | `@deepseek-ai/dsh-session-persistence-jsonl` (`packages/session/session-persistence-jsonl`) | PRD D-003: SQLite is the only official session persistence provider; JSONL provider dropped. |
 | REPLACE | `@deepseek-ai/dsh-llm-deepseek` (`packages/llm/deepseek`) | Replaced by the OpenAI-compatible provider (@teoclub/harness-llm-openai-compatible) and the CI mock provider. |
 | REPLACE | `Host / Client / Web / SDK product surface` (`packages/host, packages/client, packages/web, packages/sdk`) | Replaced by the lean React/Vite Rigo Work UI, HTTP/SSE host and in-process SDK (PRD D-006/D-007). |
+| DROP | `@deepseek-ai/dsh-atomic-write` (`packages/util/atomic-write`) | Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer. |
+| DROP | `@deepseek-ai/dsh-package-manifest` (`packages/util/package-manifest`) | Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer. |
+| DROP | `@deepseek-ai/dsh-agent-tool-presentation` (`packages/core/agent-tool-presentation`) | Dropped from the minimal scaffold: no consumer remains in the agent core. |
+| DROP | `@deepseek-ai/dsh-agent-default-model` (`packages/core/agent-default-model`) | Dropped from the minimal scaffold: no consumer remains in the agent core. |
+| DROP | `@deepseek-ai/dsh-home-paths` (`packages/util/home-paths`) | Dropped from the minimal scaffold: its only consumer was the removed app-boot profile and env layer. |
+| DROP | `@deepseek-ai/dsh-launch-environment` (`packages/util/launch-environment`) | Dropped from the minimal scaffold: its only consumer was the removed app-boot env layer. |
 
 ## Verification
 

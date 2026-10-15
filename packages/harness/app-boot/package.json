@@ -1,6 +1,6 @@
 {
   "name": "@teoclub/harness-app-boot",
-  "description": "Shared boot glue for the app bins: .env loading, fail-loud Loader guards, snapshot-aware config resolution, and the Loader boot sequence",
+  "description": "Minimal boot: mounts the default agent plugins on one Cordis root.",
   "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
@@ -33,43 +33,21 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./worker/profile-resolution-bootstrap": {
-      "development": "./src/profile-resolution/worker-bootstrap.ts",
-      "types": "./lib/types/profile-resolution/worker-bootstrap.d.ts",
-      "default": "./lib/worker/profile-resolution-bootstrap.js"
-    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "dependencies": {
-    "@teoclub/harness-package-manifest": "*",
-    "@teoclub/harness-atomic-write": "*",
-    "node-addon-require-builtin": "^0.1.6",
-    "resolve.exports": "^2.0.3",
-    "chokidar": "^4.0.3",
-    "js-yaml": "^4.2.0"
-  },
   "peerDependencies": {
-    "@teoclub/harness-launch-environment": "*",
-    "@teoclub/cordis-plugin-include": "*",
-    "@teoclub/cordis-plugin-loader": "*",
-    "@teoclub/cordis-plugin-group": "*",
-    "@teoclub/cordis-plugin-hmr": "*",
-    "@teoclub/harness-system-prompt": "*",
-    "@teoclub/harness-home-paths": "*",
     "@teoclub/cordis": "*",
     "@teoclub/harness-agent": "*",
     "@teoclub/harness-agent-loop": "*",
     "@teoclub/harness-llm": "*",
     "@teoclub/harness-session": "*",
+    "@teoclub/harness-session-projection": "*",
+    "@teoclub/harness-system-prompt": "*",
     "@teoclub/harness-tools": "*"
-  },
-  "devDependencies": {
-    "@types/js-yaml": "^4.0.9"
   },
   "files": [
     "lib/index.js",
-    "lib/worker/profile-resolution-bootstrap.js",
     "lib/types/**/*.d.ts"
   ]
 }

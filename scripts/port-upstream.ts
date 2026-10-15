@@ -168,6 +168,10 @@ const NOT_PORTED_TESTS: { file: string; reason: string }[] = [
   { file: 'packages/core/tools/tests/gen-tool-catalog.spec.ts', reason: 'harvests the tool schemas of every upstream tool package; most are outside the migration closure' },
   { file: 'packages/core/agent/tests/verify-export-jsdoc.spec.ts', reason: 'audits upstream repo-wide export JSDoc conventions' },
   { file: 'packages/core/session/tests/gen-persistence-catalog.spec.ts', reason: 'snapshots the upstream persistence-package catalog; most entries are outside the migration closure' },
+  ...['app-boot', 'config-dump', 'config-reload', 'profile', 'profile-resolution', 'profile-resolution-service', 'profile-resolution-worker-bootstrap', 'user-patches', 'watch-config'].map((name) => ({
+    file: `packages/boot/app-boot/tests/${name}.spec.ts`,
+    reason: 'removed with the app-boot profile, env and config-watch layer: the minimal scaffold boots only the core plugin tree (core-boot.ts)',
+  })),
   { file: 'packages/boot/app-boot/tests/hmr-config.spec.ts', reason: 'covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/upstream/app-boot/tests/watch-config.spec.ts supersedes it' },
 ]
 
@@ -178,12 +182,7 @@ const NOT_PORTED_TESTS: { file: string; reason: string }[] = [
  * directory removes them silently, because nothing downstream ever looks for
  * a file upstream does not have.
  */
-const LOCAL_TEST_FILES: { file: string; reason: string }[] = [
-  {
-    file: 'tests/upstream/app-boot/tests/watch-config.spec.ts',
-    reason: 'local addition: ported from the newer upstream pin, where the transactional HMR revert moved exact config watching into app boot',
-  },
-]
+const LOCAL_TEST_FILES: { file: string; reason: string }[] = []
 
 /**
  * Per-file test adaptations, applied after the standard specifier rewrite.

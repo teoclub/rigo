@@ -186,7 +186,7 @@ if (domainChecked === 0) {
 // Workspace entries (Issue 003 AC 1).
 // ---------------------------------------------------------------------------
 console.log('Workspace entries')
-for (const entry of ['packages/harness', 'packages/shared', 'packages/work', 'packages/code', 'packages/api', 'packages/bundle', 'apps', 'examples', 'tests']) {
+for (const entry of ['packages/harness', 'examples', 'tests']) {
   if (!existsSync(join(root, entry))) fail(`workspace entry ${entry} is missing`)
   else ok(entry)
 }

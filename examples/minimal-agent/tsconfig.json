@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "lib/types",
+    "noEmit": true
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../../packages/harness/app-boot" },
+    { "path": "../../packages/harness/llm" },
+    { "path": "../../packages/harness/llm-mock" },
+    { "path": "../../packages/harness/llm-openai-compatible" },
+    { "path": "../../packages/harness/session" },
+    { "path": "../../packages/harness/tools" }
+  ]
+}

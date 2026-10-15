@@ -104,30 +104,6 @@
       "adapted": false
     },
     {
-      "localPackage": "@teoclub/harness-atomic-write",
-      "upstreamPath": "packages/util/atomic-write",
-      "classification": "KEEP",
-      "srcFiles": 1,
-      "testFiles": 1,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 1,
-      "deps": [],
-      "adapted": false
-    },
-    {
-      "localPackage": "@teoclub/harness-package-manifest",
-      "upstreamPath": "packages/util/package-manifest",
-      "classification": "KEEP",
-      "srcFiles": 2,
-      "testFiles": 0,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 2,
-      "deps": [],
-      "adapted": false
-    },
-    {
       "localPackage": "@teoclub/harness-attachment",
       "upstreamPath": "packages/attachment/attachment",
       "classification": "KEEP",
@@ -319,36 +295,6 @@
       "adapted": false
     },
     {
-      "localPackage": "@teoclub/harness-agent-tool-presentation",
-      "upstreamPath": "packages/core/agent-tool-presentation",
-      "classification": "KEEP",
-      "srcFiles": 1,
-      "testFiles": 1,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 14,
-      "deps": [
-        "@teoclub/harness-tools"
-      ],
-      "adapted": false
-    },
-    {
-      "localPackage": "@teoclub/harness-agent-default-model",
-      "upstreamPath": "packages/core/agent-default-model",
-      "classification": "ADAPT",
-      "srcFiles": 1,
-      "testFiles": 1,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 11,
-      "deps": [
-        "@teoclub/harness-agent",
-        "@teoclub/harness-llm",
-        "@teoclub/harness-settings"
-      ],
-      "adapted": true
-    },
-    {
       "localPackage": "@teoclub/harness-agent-loop",
       "upstreamPath": "packages/core/agent-loop",
       "classification": "ADAPT",
@@ -512,30 +458,6 @@
       "adapted": true
     },
     {
-      "localPackage": "@teoclub/harness-home-paths",
-      "upstreamPath": "packages/util/home-paths",
-      "classification": "ADAPT",
-      "srcFiles": 1,
-      "testFiles": 1,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 2,
-      "deps": [],
-      "adapted": true
-    },
-    {
-      "localPackage": "@teoclub/harness-launch-environment",
-      "upstreamPath": "packages/util/launch-environment",
-      "classification": "ADAPT",
-      "srcFiles": 1,
-      "testFiles": 1,
-      "omittedTestFiles": [],
-      "adaptedTestFiles": [],
-      "specifierEdits": 4,
-      "deps": [],
-      "adapted": true
-    },
-    {
       "localPackage": "@teoclub/harness-app-boot",
       "upstreamPath": "packages/boot/app-boot",
       "classification": "ADAPT",
@@ -591,7 +513,7 @@
       "upstreamPackage": "@deepseek-ai/dsh-base",
       "upstreamPath": "packages/bundle/base",
       "classification": "REPLACE",
-      "reason": "Replaced by the new @teoclub/work-base bundle (Rigo Work product composition)."
+      "reason": "Replaced by the Rigo Work product bundle (removed from the minimal scaffold)."
     },
     {
       "upstreamPackage": "Coding packages (shell, lsp, terminal, sandbox enforcement backends)",
@@ -616,6 +538,42 @@
       "upstreamPath": "packages/host, packages/client, packages/web, packages/sdk",
       "classification": "REPLACE",
       "reason": "Replaced by the lean React/Vite Rigo Work UI, HTTP/SSE host and in-process SDK (PRD D-006/D-007)."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-atomic-write",
+      "upstreamPath": "packages/util/atomic-write",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-package-manifest",
+      "upstreamPath": "packages/util/package-manifest",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-agent-tool-presentation",
+      "upstreamPath": "packages/core/agent-tool-presentation",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: no consumer remains in the agent core."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-agent-default-model",
+      "upstreamPath": "packages/core/agent-default-model",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: no consumer remains in the agent core."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-home-paths",
+      "upstreamPath": "packages/util/home-paths",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: its only consumer was the removed app-boot profile and env layer."
+    },
+    {
+      "upstreamPackage": "@deepseek-ai/dsh-launch-environment",
+      "upstreamPath": "packages/util/launch-environment",
+      "classification": "DROP",
+      "reason": "Dropped from the minimal scaffold: its only consumer was the removed app-boot env layer."
     }
   ]
 }

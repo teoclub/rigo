@@ -8,19 +8,22 @@
 
 The migration intentionally deviates from upstream in the following ways (SPEC §2.3, PRD):
 
-- **REPLACE** `@deepseek-ai/dsh-base` (`packages/bundle/base`) — Replaced by the new @teoclub/work-base bundle (Rigo Work product composition).
+- **REPLACE** `@deepseek-ai/dsh-base` (`packages/bundle/base`) — Replaced by the Rigo Work product bundle (removed from the minimal scaffold).
 - **REPLACE** `Coding packages (shell, lsp, terminal, sandbox enforcement backends)` (`packages/shell, packages/lsp, packages/terminal`) — Replaced by the minimal Rigo Code bundle (repository context + workspace file read/write) per PRD D-002. The sandbox family was carved out of this row at the 0.1.6 baseline: upstream tools now imports @deepseek-ai/dsh-sandbox at runtime (the escalation vocabulary), so sandbox/sandbox (the contract and escalation vocabulary) and sandbox/sandbox-policy joined the KEEP closure. The enforcement backends (sandbox-local, sandbox-windows-acl) stay out: they cascade into further upstream packages and native dependencies (koffi, a Linux-only Landlock addon) and no Rigo bundle mounts them.
 - **DROP** `@deepseek-ai/dsh-session-persistence-jsonl` (`packages/session/session-persistence-jsonl`) — PRD D-003: SQLite is the only official session persistence provider; JSONL provider dropped.
 - **REPLACE** `@deepseek-ai/dsh-llm-deepseek` (`packages/llm/deepseek`) — Replaced by the OpenAI-compatible provider (@teoclub/harness-llm-openai-compatible) and the CI mock provider.
 - **REPLACE** `Host / Client / Web / SDK product surface` (`packages/host, packages/client, packages/web, packages/sdk`) — Replaced by the lean React/Vite Rigo Work UI, HTTP/SSE host and in-process SDK (PRD D-006/D-007).
+- **DROP** `@deepseek-ai/dsh-atomic-write` (`packages/util/atomic-write`) — Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer.
+- **DROP** `@deepseek-ai/dsh-package-manifest` (`packages/util/package-manifest`) — Dropped from the minimal scaffold: its only consumer was the removed app-boot profile layer.
+- **DROP** `@deepseek-ai/dsh-agent-tool-presentation` (`packages/core/agent-tool-presentation`) — Dropped from the minimal scaffold: no consumer remains in the agent core.
+- **DROP** `@deepseek-ai/dsh-agent-default-model` (`packages/core/agent-default-model`) — Dropped from the minimal scaffold: no consumer remains in the agent core.
+- **DROP** `@deepseek-ai/dsh-home-paths` (`packages/util/home-paths`) — Dropped from the minimal scaffold: its only consumer was the removed app-boot profile and env layer.
+- **DROP** `@deepseek-ai/dsh-launch-environment` (`packages/util/launch-environment`) — Dropped from the minimal scaffold: its only consumer was the removed app-boot env layer.
 
 ADAPT packages carry recorded local modifications (reason in the manifest):
-- **ADAPT** `@teoclub/harness-agent-default-model` — Adapted: the Rigo settings provider takes a branded SettingsNamespace, so the namespace constant is minted through settingsNamespace(...) rather than by upstream type-level inference.
 - **ADAPT** `@teoclub/harness-agent-loop` — Adapted: the Rigo settings provider takes a branded SettingsNamespace, so the namespace constant is minted through settingsNamespace(...) rather than by upstream type-level inference.
 - **ADAPT** `@teoclub/harness-session-persistence` — SPEC §2.3: persistence coordinator seam implemented by the SQLite provider. Local addition (Issue 039): ApiSessionFields/ApiSessionRow and the no-op setApiFields default, so the API session list can persist provider/model/title beside the event-sourced log.
 - **ADAPT** `@teoclub/harness-settings` — SPEC §2.3: minimal subset - service definition only, no file provider.
-- **ADAPT** `@teoclub/harness-home-paths` — Adapted: DSH_HOME environment/home layout becomes the Rigo harness home.
-- **ADAPT** `@teoclub/harness-launch-environment` — Adapted: DSH_* launch variables become RIGO_* variables.
 - **ADAPT** `@teoclub/harness-app-boot` — SPEC §2.3: boot glue adapted to Rigo profiles/bundles/patches and home layout.
 
 ## Per-package test mapping
@@ -39,16 +42,6 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/core/agent/tests/invariant.spec.ts` | `invariant.spec.ts` | `tests/upstream/agent/tests/invariant.spec.ts` | `unchanged` | — |
 | `packages/core/agent/tests/model-selection.spec.ts` | `model-selection.spec.ts` | `tests/upstream/agent/tests/model-selection.spec.ts` | `unchanged` | — |
 | `packages/core/agent/tests/verify-export-jsdoc.spec.ts` | `verify-export-jsdoc.spec.ts` | — | `intentionally omitted` | audits upstream repo-wide export JSDoc conventions |
-
-### @teoclub/harness-agent-default-model
-
-| Upstream package | Upstream path | Local path | Classification |
-| --- | --- | --- | --- |
-| `@deepseek-ai/dsh-agent-default-model` | `packages/core/agent-default-model` | `packages/harness/agent-default-model` | `ADAPT` |
-
-| Upstream File | Upstream Test | Local Test File | Status | Reason |
-| --- | --- | --- | --- | --- |
-| `packages/core/agent-default-model/tests/agent-default-model.spec.ts` | `agent-default-model.spec.ts` | `tests/upstream/agent-default-model/tests/agent-default-model.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-agent-loop
 
@@ -85,16 +78,6 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | `packages/core/agent-loop/tests/request-freeze.spec.ts` | `request-freeze.spec.ts` | — | `intentionally omitted` | imports the agent-loop testkit, which is not ported |
 | `packages/core/agent-loop/tests/shutdown-drain.spec.ts` | `shutdown-drain.spec.ts` | — | `intentionally omitted` | imports the dropped jsonl persistence provider (PRD D-003) |
 
-### @teoclub/harness-agent-tool-presentation
-
-| Upstream package | Upstream path | Local path | Classification |
-| --- | --- | --- | --- |
-| `@deepseek-ai/dsh-agent-tool-presentation` | `packages/core/agent-tool-presentation` | `packages/harness/agent-tool-presentation` | `KEEP` |
-
-| Upstream File | Upstream Test | Local Test File | Status | Reason |
-| --- | --- | --- | --- | --- |
-| `packages/core/agent-tool-presentation/tests/agent-tool-presentation.spec.ts` | `agent-tool-presentation.spec.ts` | `tests/upstream/agent-tool-presentation/tests/agent-tool-presentation.spec.ts` | `unchanged` | — |
-
 ### @teoclub/harness-app-boot
 
 | Upstream package | Upstream path | Local path | Classification |
@@ -103,27 +86,8 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
-| `packages/boot/app-boot/tests/app-boot.spec.ts` | `app-boot.spec.ts` | `tests/upstream/app-boot/tests/app-boot.spec.ts` | `adapted` | reverted Loader: fail-loud diagnostics now come from assertEntriesActivated, which labels each row with its entry id and specifier |
-| `packages/boot/app-boot/tests/config-dump.spec.ts` | `config-dump.spec.ts` | `tests/upstream/app-boot/tests/config-dump.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/config-reload.spec.ts` | `config-reload.spec.ts` | `tests/upstream/app-boot/tests/config-reload.spec.ts` | `adapted` | reverted Loader (upstream PR #932): pins eager non-transactional containment instead of rollback; Node-only cases documented as a runtime diff |
 | `packages/boot/app-boot/tests/loader-shape.compat.spec.ts` | `loader-shape.compat.spec.ts` | `tests/upstream/app-boot/tests/loader-shape.compat.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/profile-resolution-service.spec.ts` | `profile-resolution-service.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution-service.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/profile-resolution-worker-bootstrap.spec.ts` | `profile-resolution-worker-bootstrap.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution-worker-bootstrap.spec.ts` | `adapted` | hand-maintained: the test reaches the package source through its public `src/*` export instead of upstream's in-package `../src/` path, which does not exist in the mirrored tests/upstream layout |
-| `packages/boot/app-boot/tests/profile-resolution.spec.ts` | `profile-resolution.spec.ts` | `tests/upstream/app-boot/tests/profile-resolution.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/profile.spec.ts` | `profile.spec.ts` | `tests/upstream/app-boot/tests/profile.spec.ts` | `unchanged` | — |
-| `packages/boot/app-boot/tests/user-patches.spec.ts` | `user-patches.spec.ts` | `tests/upstream/app-boot/tests/user-patches.spec.ts` | `adapted` | reverted Loader: the app-owned watchConfig replaces Hmr.registerConfig, and failures are logged rather than broadcast on hmr-config-update-failed |
-| `packages/boot/app-boot/tests/watch-config.spec.ts` | `watch-config.spec.ts` | `tests/upstream/app-boot/tests/watch-config.spec.ts` | `unchanged` | — |
 | `packages/boot/app-boot/tests/hmr-config.spec.ts` | `hmr-config.spec.ts` | — | `intentionally omitted` | covered Hmr.registerConfig(), deleted with the transactional HMR revert; the app-owned tests/upstream/app-boot/tests/watch-config.spec.ts supersedes it |
-
-### @teoclub/harness-atomic-write
-
-| Upstream package | Upstream path | Local path | Classification |
-| --- | --- | --- | --- |
-| `@deepseek-ai/dsh-atomic-write` | `packages/util/atomic-write` | `packages/harness/atomic-write` | `KEEP` |
-
-| Upstream File | Upstream Test | Local Test File | Status | Reason |
-| --- | --- | --- | --- | --- |
-| `packages/util/atomic-write/tests/atomic-write.spec.ts` | `atomic-write.spec.ts` | `tests/upstream/atomic-write/tests/atomic-write.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-attachment
 
@@ -168,16 +132,6 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | --- | --- | --- | --- | --- |
 | `packages/util/crypto/tests/uuid.spec.ts` | `uuid.spec.ts` | `tests/upstream/crypto/tests/uuid.spec.ts` | `unchanged` | — |
 
-### @teoclub/harness-home-paths
-
-| Upstream package | Upstream path | Local path | Classification |
-| --- | --- | --- | --- |
-| `@deepseek-ai/dsh-home-paths` | `packages/util/home-paths` | `packages/harness/home-paths` | `ADAPT` |
-
-| Upstream File | Upstream Test | Local Test File | Status | Reason |
-| --- | --- | --- | --- | --- |
-| `packages/util/home-paths/tests/home-paths.spec.ts` | `home-paths.spec.ts` | `tests/upstream/home-paths/tests/home-paths.spec.ts` | `unchanged` | — |
-
 ### @teoclub/harness-invariants
 
 | Upstream package | Upstream path | Local path | Classification |
@@ -187,16 +141,6 @@ ADAPT packages carry recorded local modifications (reason in the manifest):
 | Upstream File | Upstream Test | Local Test File | Status | Reason |
 | --- | --- | --- | --- | --- |
 | `packages/runtime-diagnostics/invariants/tests/service.spec.ts` | `service.spec.ts` | `tests/upstream/invariants/tests/service.spec.ts` | `adapted` | the blocklist-precedence case pairs a package-name pattern with the packages it must match, and the pattern is a REGEX PREFIX (`^@deepseek-ai/dsh-`), which no whole-token rewrite can see. Left as-is the allowlist matches nothing and the case passes for the wrong reason, so the pattern is repointed at the names this repo actually registers. The other upstream spellings in this file are opaque probe names the cases never match against a real package, and stay as written |
-
-### @teoclub/harness-launch-environment
-
-| Upstream package | Upstream path | Local path | Classification |
-| --- | --- | --- | --- |
-| `@deepseek-ai/dsh-launch-environment` | `packages/util/launch-environment` | `packages/harness/launch-environment` | `ADAPT` |
-
-| Upstream File | Upstream Test | Local Test File | Status | Reason |
-| --- | --- | --- | --- | --- |
-| `packages/util/launch-environment/tests/launch-environment.spec.ts` | `launch-environment.spec.ts` | `tests/upstream/launch-environment/tests/launch-environment.spec.ts` | `unchanged` | — |
 
 ### @teoclub/harness-llm
 

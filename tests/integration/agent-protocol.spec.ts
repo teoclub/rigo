@@ -32,7 +32,6 @@ import { MockAdapter, textResponse } from '../upstream/agent-loop/tests/mock-ada
  * replaceable loop factory.
  */
 
-const isBun = typeof Bun !== 'undefined'
 
 describe('Rigo agent public API (Issue 013)', () => {
   it('creates, gets and disposes agents through the registry; double dispose is idempotent', async () => {
@@ -59,57 +58,6 @@ describe('Rigo agent public API (Issue 013)', () => {
     } finally {
       await handle.dispose()
     }
-  })
-
-  describe.skipIf(isBun)('resume (node:sqlite-backed)', () => {
-    it('resumes an agent on a persisted session with its event log intact', async () => {
-      const { default: SqliteSessionPersistence } = await import('@teoclub/shared-session-persistence-sqlite')
-      const dir = mkdtempSync(join(tmpdir(), 'rigo-agent-resume-'))
-      const mount = async (root: string): Promise<{ ctx: Context; dispose: () => Promise<void> }> => {
-        const ctx = new Context()
-        await ctx.plugin(LlmRuntime)
-        await ctx.plugin(SessionStore)
-        await ctx.plugin(SystemPrompt)
-        await ctx.plugin(ToolRuntime)
-        await ctx.plugin(AgentRegistry)
-        // The 0.1.6 loop declares `sessionProjections` as a required
-        // injection, so the registry must mount before it.
-        await ctx.plugin(SessionProjectionRegistry)
-        await ctx.plugin(AgentLoop, { agents: [] })
-        await ctx.plugin(SqliteSessionPersistence as never, { path: join(root, 'rigo.sqlite') })
-        ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('resumed')]))
-        return { ctx, dispose: () => ctx.fiber.dispose() }
-      }
-      try {
-        const first = await mount(dir)
-        const sessionId = SessionId('session_agent_resume')
-        const created = await createAgent(first.ctx, { sessionId, agentOptions: { provider: 'mock', model: 'mock' } })
-        created.agent.send('before restart')
-        await created.agent.whenIdle()
-        await first.ctx.sessions.flush(first.ctx.agents.get(sessionId)!.session)
-        await created.dispose()
-        await first.dispose()
-
-        const second = await mount(dir)
-        try {
-          const resumed = await resumeAgent(second.ctx, {
-            resumeSessionId: sessionId,
-            agentOptions: { provider: 'mock', model: 'mock' },
-          })
-          expect(resumed.agent.sessionId).toBe(sessionId)
-          expect(resumed.agent.status).toBe('idle')
-          // The event log survived the restart with the pre-restart turn.
-          const types = second.ctx.agents.get(sessionId)!.session.snapshotEvents().map((event) => event.type)
-          expect(types).toContain('user/message')
-          expect(types).toContain('assistant/message')
-          await resumed.dispose()
-        } finally {
-          await second.dispose()
-        }
-      } finally {
-        rmSync(dir, { recursive: true, force: true })
-      }
-    })
   })
 
   it('exposes only idle|running status publicly; phases arrive as events', async () => {

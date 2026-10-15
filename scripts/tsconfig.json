@@ -6,15 +6,21 @@
     "outDir": "lib/types",
     "noEmit": true
   },
-  "include": ["**/*.ts"],
+  "include": [
+    "**/*.ts"
+  ],
   "references": [
-    { "path": "../packages/bundle/work-base" },
-    { "path": "../packages/harness/agent-loop" },
-    { "path": "../packages/harness/llm-mock" },
-    { "path": "../packages/shared/knowledge-sqlite-fts" },
-    { "path": "../packages/shared/session-persistence-sqlite" },
-    { "path": "../packages/shared/storage-sqlite-node" },
-    { "path": "../vendor/cordis/packages/cordis" },
-    { "path": "../vendor/cordis/packages/plugins/include" }
+    {
+      "path": "../packages/harness/agent-loop"
+    },
+    {
+      "path": "../packages/harness/llm-mock"
+    },
+    {
+      "path": "../vendor/cordis/packages/cordis"
+    },
+    {
+      "path": "../vendor/cordis/packages/plugins/include"
+    }
   ]
 }

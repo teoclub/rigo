@@ -15,19 +15,7 @@
       "path": "../agent-loop"
     },
     {
-      "path": "../atomic-write"
-    },
-    {
-      "path": "../home-paths"
-    },
-    {
-      "path": "../launch-environment"
-    },
-    {
       "path": "../llm"
-    },
-    {
-      "path": "../package-manifest"
     },
     {
       "path": "../session"
@@ -43,18 +31,6 @@
     },
     {
       "path": "../../../vendor/cordis/packages/cordis"
-    },
-    {
-      "path": "../../../vendor/cordis/packages/plugins/group"
-    },
-    {
-      "path": "../../../vendor/cordis/packages/plugins/hmr"
-    },
-    {
-      "path": "../../../vendor/cordis/packages/plugins/include"
-    },
-    {
-      "path": "../../../vendor/cordis/packages/plugins/loader"
     }
   ]
 }

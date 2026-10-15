@@ -17,11 +17,6 @@ export default defineConfig({
       // to a file nothing produces (or to a leftover from the last time it
       // was listed) while `bun run build` still reports success.
       'packages/harness/*',
-      'packages/shared/*',
-      'packages/work/*',
-      'packages/code/*',
-      'packages/api/*',
-      'packages/bundle/*',
     ],
   },
   entry: ['lib/types/index.js'],

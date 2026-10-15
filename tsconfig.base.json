@@ -25,42 +25,6 @@
       "node"
     ],
     "paths": {
-      "@teoclub/api-http": [
-        "./packages/api/http/src"
-      ],
-      "@teoclub/api-http/src/*": [
-        "./packages/api/http/src/*"
-      ],
-      "@teoclub/api-sdk": [
-        "./packages/api/sdk/src"
-      ],
-      "@teoclub/api-sdk/src/*": [
-        "./packages/api/sdk/src/*"
-      ],
-      "@teoclub/api-wire": [
-        "./packages/api/wire/src"
-      ],
-      "@teoclub/api-wire/src/*": [
-        "./packages/api/wire/src/*"
-      ],
-      "@teoclub/code-context-repository": [
-        "./packages/code/context-repository/src"
-      ],
-      "@teoclub/code-context-repository/src/*": [
-        "./packages/code/context-repository/src/*"
-      ],
-      "@teoclub/code-file-actions": [
-        "./packages/code/file-actions/src"
-      ],
-      "@teoclub/code-file-actions/src/*": [
-        "./packages/code/file-actions/src/*"
-      ],
-      "@teoclub/code-minimal": [
-        "./packages/bundle/code-minimal/src"
-      ],
-      "@teoclub/code-minimal/src/*": [
-        "./packages/bundle/code-minimal/src/*"
-      ],
       "@teoclub/cordis": [
         "./vendor/cordis/packages/cordis/src/index.ts"
       ],
@@ -85,12 +49,6 @@
       "@teoclub/harness-agent": [
         "./packages/harness/agent/src"
       ],
-      "@teoclub/harness-agent-default-model": [
-        "./packages/harness/agent-default-model/src"
-      ],
-      "@teoclub/harness-agent-default-model/src/*": [
-        "./packages/harness/agent-default-model/src/*"
-      ],
       "@teoclub/harness-agent-loop": [
         "./packages/harness/agent-loop/src"
       ],
@@ -106,12 +64,6 @@
       "@teoclub/harness-agent-protocol/src/*": [
         "./packages/harness/agent-protocol/src/*"
       ],
-      "@teoclub/harness-agent-tool-presentation": [
-        "./packages/harness/agent-tool-presentation/src"
-      ],
-      "@teoclub/harness-agent-tool-presentation/src/*": [
-        "./packages/harness/agent-tool-presentation/src/*"
-      ],
       "@teoclub/harness-agent/invariant": [
         "./packages/harness/agent/src/invariant.ts"
       ],
@@ -126,12 +78,6 @@
       ],
       "@teoclub/harness-app-boot/src/*": [
         "./packages/harness/app-boot/src/*"
-      ],
-      "@teoclub/harness-atomic-write": [
-        "./packages/harness/atomic-write/src"
-      ],
-      "@teoclub/harness-atomic-write/src/*": [
-        "./packages/harness/atomic-write/src/*"
       ],
       "@teoclub/harness-attachment": [
         "./packages/harness/attachment/src"
@@ -172,23 +118,11 @@
       "@teoclub/harness-crypto/src/*": [
         "./packages/harness/crypto/src/*"
       ],
-      "@teoclub/harness-home-paths": [
-        "./packages/harness/home-paths/src"
-      ],
-      "@teoclub/harness-home-paths/src/*": [
-        "./packages/harness/home-paths/src/*"
-      ],
       "@teoclub/harness-invariants": [
         "./packages/harness/invariants/src"
       ],
       "@teoclub/harness-invariants/src/*": [
         "./packages/harness/invariants/src/*"
-      ],
-      "@teoclub/harness-launch-environment": [
-        "./packages/harness/launch-environment/src"
-      ],
-      "@teoclub/harness-launch-environment/src/*": [
-        "./packages/harness/launch-environment/src/*"
       ],
       "@teoclub/harness-llm": [
         "./packages/harness/llm/src"
@@ -234,15 +168,6 @@
       ],
       "@teoclub/harness-loop-protocol/src/*": [
         "./packages/harness/loop-protocol/src/*"
-      ],
-      "@teoclub/harness-package-manifest": [
-        "./packages/harness/package-manifest/src"
-      ],
-      "@teoclub/harness-package-manifest/src/*": [
-        "./packages/harness/package-manifest/src/*"
-      ],
-      "@teoclub/harness-package-manifest/types": [
-        "./packages/harness/package-manifest/src/types.ts"
       ],
       "@teoclub/harness-protocol": [
         "./packages/harness/protocol/src"
@@ -396,105 +321,6 @@
       ],
       "@teoclub/schemastery": [
         "./vendor/cordis/packages/schemastery/src/index.ts"
-      ],
-      "@teoclub/shared-actions": [
-        "./packages/shared/actions/src"
-      ],
-      "@teoclub/shared-actions/src/*": [
-        "./packages/shared/actions/src/*"
-      ],
-      "@teoclub/shared-approvals": [
-        "./packages/shared/approvals/src"
-      ],
-      "@teoclub/shared-approvals/src/*": [
-        "./packages/shared/approvals/src/*"
-      ],
-      "@teoclub/shared-audit": [
-        "./packages/shared/audit/src"
-      ],
-      "@teoclub/shared-audit/src/*": [
-        "./packages/shared/audit/src/*"
-      ],
-      "@teoclub/shared-knowledge": [
-        "./packages/shared/knowledge/src"
-      ],
-      "@teoclub/shared-knowledge-sqlite-fts": [
-        "./packages/shared/knowledge-sqlite-fts/src"
-      ],
-      "@teoclub/shared-knowledge-sqlite-fts/src/*": [
-        "./packages/shared/knowledge-sqlite-fts/src/*"
-      ],
-      "@teoclub/shared-knowledge/src/*": [
-        "./packages/shared/knowledge/src/*"
-      ],
-      "@teoclub/shared-session-persistence-sqlite": [
-        "./packages/shared/session-persistence-sqlite/src"
-      ],
-      "@teoclub/shared-session-persistence-sqlite/src/*": [
-        "./packages/shared/session-persistence-sqlite/src/*"
-      ],
-      "@teoclub/shared-storage-sqlite-node": [
-        "./packages/shared/storage-sqlite-node/src"
-      ],
-      "@teoclub/shared-storage-sqlite-node/definition": [
-        "./packages/shared/storage-sqlite-node/src/definition.ts"
-      ],
-      "@teoclub/shared-storage-sqlite-node/node": [
-        "./packages/shared/storage-sqlite-node/src/node.ts"
-      ],
-      "@teoclub/shared-storage-sqlite-node/src/*": [
-        "./packages/shared/storage-sqlite-node/src/*"
-      ],
-      "@teoclub/work-base": [
-        "./packages/bundle/work-base/src"
-      ],
-      "@teoclub/work-base/client-composition": [
-        "./packages/bundle/work-base/src/client-composition.ts"
-      ],
-      "@teoclub/work-base/session-defaults": [
-        "./packages/bundle/work-base/src/session-defaults.ts"
-      ],
-      "@teoclub/work-base/src/*": [
-        "./packages/bundle/work-base/src/*"
-      ],
-      "@teoclub/work-context": [
-        "./packages/work/context/src"
-      ],
-      "@teoclub/work-context/last-user-input": [
-        "./packages/work/context/src/last-user-input.ts"
-      ],
-      "@teoclub/work-context/src/*": [
-        "./packages/work/context/src/*"
-      ],
-      "@teoclub/work-documents": [
-        "./packages/work/documents/src"
-      ],
-      "@teoclub/work-documents-local": [
-        "./packages/work/documents-local/src"
-      ],
-      "@teoclub/work-documents-local/src/*": [
-        "./packages/work/documents-local/src/*"
-      ],
-      "@teoclub/work-documents-write": [
-        "./packages/work/documents-write/src"
-      ],
-      "@teoclub/work-documents-write/src/*": [
-        "./packages/work/documents-write/src/*"
-      ],
-      "@teoclub/work-documents/src/*": [
-        "./packages/work/documents/src/*"
-      ],
-      "@teoclub/work-tool-document-read": [
-        "./packages/work/tool-document-read/src"
-      ],
-      "@teoclub/work-tool-document-read/src/*": [
-        "./packages/work/tool-document-read/src/*"
-      ],
-      "@teoclub/work-tool-document-write": [
-        "./packages/work/tool-document-write/src"
-      ],
-      "@teoclub/work-tool-document-write/src/*": [
-        "./packages/work/tool-document-write/src/*"
       ]
     }
   }

@@ -1,105 +1,35 @@
-# kora
-The Open Ecosystem for Agent Harnesses.
+# rigo：最小 AI agent 脚手架
 
-Rigo is a minimal, production-usable agent harness built on
-[Cordis](https://github.com/cordiverse/cordis) plugins: a session log, a tool
-loop, a context assembly, an approval gate, and a browser UI that composes
-itself from whatever the host actually mounted.
+像给小朋友讲故事一样讲清楚：
 
-## Running it
+- 🤖 **小机器人**：会听、会想、会玩玩具、会回答的 AI。
+- 🧠 **脑子**：大模型。没有钥匙也能用假脑子玩。
+- 🧰 **玩具箱**：工具。机器人需要什么玩具，就放什么玩具进去。
+- 📓 **小本子**：会话，记住说过的话。
+- 📦 **大盒子**：deepseek-harness 内核，把以上东西装在一起。
+- 🧩 **积木**：cordis 插件。需要什么，就把对应的积木拿过来。
+
+## 快速开始
 
 ```sh
 bun install
-bun run build:web     # builds the browser UI into apps/work-web/dist
-bun run start         # serves the UI and /api/v1 on one origin
+bun run start        # 假脑子，不需要钥匙
+bun run test         # 所有测试
+bun run typecheck    # 类型检查
 ```
 
-`bun run start` boots the harness with the deterministic **mock** model, so it
-answers without any credentials. To use a real model, point it at any
-OpenAI-compatible endpoint:
+用真脑子，设置 `RIGO_LLM_BASE_URL`、`RIGO_LLM_API_KEY`、`RIGO_LLM_MODEL` 后再 `bun run start`，
+细节见 [examples/minimal-agent/README.md](examples/minimal-agent/README.md)。
 
-```sh
-RIGO_LLM_BASE_URL=https://api.example.com/v1 \
-RIGO_LLM_MODEL=your-model \
-RIGO_LLM_API_KEY=sk-... \
-bun run start
+## 目录
+
+```text
+packages/harness/   deepseek-harness 内核和积木（llm、tools、session、agent-loop 等）
+vendor/cordis/      cordis 积木系统（插件运行时），整个保留
+examples/           最小机器人（bun run start 的入口）
+tests/              测试
+docs/               兼容矩阵、上游基线与审计记录
 ```
 
-It prints where it is listening; open that URL.
-
-### Configuration
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `RIGO_HOME` | `<cwd>/.rigo` | Data directory: the SQLite databases, the default workspace, and the session-defaults document. Created on first run. |
-| `RIGO_PORT` | `3080` | Bound port. `0` picks an ephemeral one; the bound port is what gets printed. |
-| `RIGO_LLM_BASE_URL` | *(unset)* | OpenAI-compatible base URL, e.g. `https://api.example.com/v1`. Unset selects the mock model. |
-| `RIGO_LLM_MODEL` | `mock` | Model id sent with every request. Required whenever `RIGO_LLM_BASE_URL` is set. |
-| `RIGO_LLM_API_KEY` | *(unset)* | The API key. Read at request time; never written to the data directory, a log line, or an error. |
-| `RIGO_LLM_API_KEY_ENV` | `RIGO_LLM_API_KEY` | Name of the variable holding the key, when it lives under a different name. |
-| `RIGO_LLM_PROVIDER` | `openai` (`mock`) | Provider route id the adapter registers under; `mock` when the mock model is selected. |
-| `RIGO_LLM_MOCK` | *(unset)* | Set to `1` to force the mock model even when a base URL is set. |
-| `RIGO_STATIC_DIR` | *(discovered)* | Built UI directory to serve. Discovered next to the CLI, or at `apps/work-web/dist`. |
-
-Misconfiguration is refused **at startup**, naming the variable at fault — a
-missing key or model is reported before the port opens rather than as a
-failure mid-conversation. The chosen model route is printed on every boot, so
-which model is answering is never a guess.
-
-## Development
-
-```sh
-bun run dev           # API + Vite dev server with HMR, seeded demo workspace
-bun run typecheck     # tsc -b across every project
-bun run test          # vitest: unit, component and integration suites
-bun run e2e           # Playwright: full-product suites against a live stack
-bun run verify        # the gate chain (see below)
-```
-
-### The gate chain
-
-`bun run verify` runs the checks that keep the port honest:
-
-| Gate | What it protects |
-| --- | --- |
-| `verify:baseline` | The pinned upstream release tag and commit, and that the local upstream clone sits at the pinned commit. |
-| `audit:source` | Every ported file still traces to its upstream path, with its provenance commit. |
-| `verify:packages` | Package manifests, licenses and published artifacts. |
-| `verify:boundaries` | Import direction between packages and domains. |
-| `verify:matrix` | `docs/compatibility-matrix.md` matches the test suites it claims. |
-| `verify:compat` | The upstream suites pass on **both** Node and Bun. |
-
-The vendored Cordis family under `vendor/cordis/` carries local patches. Those
-divergences are recorded in a ledger (`vendor/cordis/scripts/merge-teo.ts`) and
-checked by `verify-teo-patches.ts`; a divergence with no ledger entry fails.
-
-## Layout
-
-```
-packages/harness/*   the agent runtime: LLM, sessions, tools, agent loop, approvals
-packages/shared/*    storage, migrations, persistence, knowledge, actions
-packages/work/*      the Rigo Work domain: documents, tools, context
-packages/api/*       the /api/v1 facade, HTTP server, and the wire contract
-packages/bundle/*    the composition roots (work-base)
-apps/work-web        the browser UI
-apps/cli             the runnable entry point (`rigo`)
-vendor/cordis        the vendored Cordis fork
-```
-
-### Where the architecture comes from
-
-The runtime is ported from the DeepSeek Harness with an explicit,
-machine-checked provenance chain (`docs/upstream-baseline.md`,
-`docs/harness-upstream-audit.json`). The browser UI is a Rigo-native design that
-adopts the upstream *contribution* mechanism rather than its code:
-
-- **Slot registry** — a compile-time `SlotMap` (TypeScript declaration merging)
-  plus a runtime ordered ledger, so a plugin's seat is type-checked where it is
-  declared and ordered where it is registered. Declaring a slot is claiming it.
-- **Host-owned composition** — the host derives the browser's plugin list from
-  its own mounted plugin tree (`GET /api/v1/client/plugins`). There is no second
-  manifest to keep in sync, so a disabled or unloaded plugin leaves the list
-  with its own effect. The browser composes exactly what it is told, and says so
-  in the UI when it is told about a plugin this build does not have.
-- **One wire contract** — `packages/api/wire` is the single source of the HTTP
-  and SSE payload shapes, including the SSE framing both sides must agree on.
+这个仓库已经不再包含 Work 产品、Code bundle、HTTP/SDK、网页界面和共享服务；
+它们留在 git 历史里，需要时可以再按积木的方式加回来。

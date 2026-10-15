@@ -4,6 +4,9 @@
   "files": [],
   "references": [
     {
+      "path": "examples/minimal-agent"
+    },
+    {
       "path": "packages/harness/brand"
     },
     {
@@ -23,12 +26,6 @@
     },
     {
       "path": "packages/harness/crypto"
-    },
-    {
-      "path": "packages/harness/atomic-write"
-    },
-    {
-      "path": "packages/harness/package-manifest"
     },
     {
       "path": "packages/harness/attachment"
@@ -61,12 +58,6 @@
       "path": "packages/harness/sandbox-policy"
     },
     {
-      "path": "packages/harness/agent-tool-presentation"
-    },
-    {
-      "path": "packages/harness/agent-default-model"
-    },
-    {
       "path": "packages/harness/agent-loop"
     },
     {
@@ -82,12 +73,6 @@
       "path": "packages/harness/settings"
     },
     {
-      "path": "packages/harness/home-paths"
-    },
-    {
-      "path": "packages/harness/launch-environment"
-    },
-    {
       "path": "packages/harness/app-boot"
     },
     {
@@ -98,12 +83,6 @@
     },
     {
       "path": "packages/harness/session-protocol"
-    },
-    {
-      "path": "packages/shared/storage-sqlite-node"
-    },
-    {
-      "path": "packages/shared/session-persistence-sqlite"
     },
     {
       "path": "packages/harness/llm-protocol"
@@ -119,60 +98,6 @@
     },
     {
       "path": "packages/harness/loop-protocol"
-    },
-    {
-      "path": "packages/work/documents"
-    },
-    {
-      "path": "packages/work/documents-local"
-    },
-    {
-      "path": "packages/shared/knowledge"
-    },
-    {
-      "path": "packages/shared/knowledge-sqlite-fts"
-    },
-    {
-      "path": "packages/work/context"
-    },
-    {
-      "path": "packages/shared/actions"
-    },
-    {
-      "path": "packages/work/documents-write"
-    },
-    {
-      "path": "packages/work/tool-document-read"
-    },
-    {
-      "path": "packages/work/tool-document-write"
-    },
-    {
-      "path": "packages/api/sdk"
-    },
-    {
-      "path": "packages/api/wire"
-    },
-    {
-      "path": "packages/api/http"
-    },
-    {
-      "path": "packages/code/context-repository"
-    },
-    {
-      "path": "packages/code/file-actions"
-    },
-    {
-      "path": "packages/bundle/code-minimal"
-    },
-    {
-      "path": "packages/bundle/work-base"
-    },
-    {
-      "path": "packages/shared/audit"
-    },
-    {
-      "path": "packages/shared/approvals"
     },
     {
       "path": "vendor/cordis/packages/kit"
@@ -200,12 +125,6 @@
     },
     {
       "path": "vendor/cordis/packages/plugins/logger-console"
-    },
-    {
-      "path": "apps/cli"
-    },
-    {
-      "path": "apps/work-web"
     }
   ]
 }
